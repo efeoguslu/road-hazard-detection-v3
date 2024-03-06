@@ -66,6 +66,7 @@ void logCompoundData(std::ofstream &logfile, float compoundAccelVector, float co
 }
 
 
+
 float compound_vector(float x, float y, float z){
   return std::sqrt(x*x + y*y + z*z);
 }
@@ -90,6 +91,7 @@ int main() {
             return -1;
         }
 
+
         //Read the current yaw angle
         device.calc_yaw = true;
 
@@ -101,6 +103,7 @@ int main() {
             //Get the current gyroscope values
             device.getGyro(&gr, &gp, &gy);
 
+            // Most of the changes will be made here:
             if(compound_vector(ax, ay, az) >= 3.0f && compound_vector(gr, gp, gy) >= 12.0f){
                 bumpCounter++;
                 std::cout << "Bump Count: " << bumpCounter << "\n";
@@ -111,10 +114,9 @@ int main() {
             logCompoundData(compoundVectorLogFile, compound_vector(ax, ay, az), compound_vector(gr, gp, gy));
             usleep(10000);
         }
-            // setFlagToLogged();
     }
     else{
-        std::cout << "Logging has already occured. Exiting." << std::endl;
+        std::cout << "Logging has already occured. Exiting. (Flag == 0)" << std::endl;
     }
 
 	return 0;
