@@ -7,4 +7,4 @@ set title "Compound Gyroscope Vector"
 set datafile separator ","
 
 # Plot calibrated data
-plot "2024-03-05_11-39-46_compound_vector.txt" using 3 with lines title "CGV"
+plot "logs/2024-03-05_11-39-46_compound_vector.txt" using 3 with lines title "CGV"

@@ -10,8 +10,7 @@
 
 MPU6050 device(0x68, false);
 
-// Assuming windowSize is defined and initialized somewhere in your code
-int windowSize = 50;
+const int windowSize = 50;
 std::deque<float> axBuffer;
 
 void updateAndLogMovingAverage(std::ofstream &axFilteredLogFile, float ax) {
@@ -31,7 +30,6 @@ void updateAndLogMovingAverage(std::ofstream &axFilteredLogFile, float ax) {
     axFilteredLogFile << movingAvg << "\n";
     axFilteredLogFile.flush(); // Flush the output buffer to ensure data is written immediately
 }
-
 
 
 bool toggleFlag() {
@@ -150,12 +148,12 @@ int main() {
 
     // Input/Output Files:
 
-    std::ofstream sensorLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/" + timestamp + "_sensor_data_log.txt");
-    std::ofstream compoundVectorLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/" + timestamp + "_compound_vector.txt");
-    std::ofstream bumpCountLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/" + timestamp + "_bump_count_log.txt");
-    std::ofstream axCalLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/" + timestamp + "_ax_cal_log.txt");
-    std::ifstream inputForFilter("/home/efeoguslu/Desktop/road-hazard-detection-v3/" + timestamp + "_ax_cal_log.txt");
-    std::ofstream axFilteredLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/" + timestamp + "_ax_filtered_log.txt");
+    std::ofstream sensorLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_sensor_data_log.txt");
+    std::ofstream compoundVectorLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_compound_vector.txt");
+    std::ofstream bumpCountLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_bump_count_log.txt");
+    std::ofstream axCalLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ax_cal_log.txt");
+    std::ifstream inputForFilter("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ax_cal_log.txt");
+    std::ofstream axFilteredLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ax_filtered_log.txt");
 
     if(!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axCalLogFile.is_open() || !inputForFilter.is_open() || !axFilteredLogFile.is_open()){
         std::cerr << "Error: Unable to open log files." << std::endl;
