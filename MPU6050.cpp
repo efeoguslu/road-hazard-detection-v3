@@ -54,12 +54,13 @@ void MPU6050::getGyroRaw(float *roll, float *pitch, float *yaw) {
 
 void MPU6050::getGyro(float *roll, float *pitch, float *yaw) {
 	getGyroRaw(roll, pitch, yaw); //Store raw values into variables
-	*roll = round((*roll - G_OFF_X) * 1000.0 / GYRO_SENS) / 1000.0; //Remove the offset and divide by the gyroscope sensetivity (use 1000 and round() to round the value to three decimal places)
+	*roll  = round((*roll - G_OFF_X) * 1000.0 / GYRO_SENS) / 1000.0; //Remove the offset and divide by the gyroscope sensetivity (use 1000 and round() to round the value to three decimal places)
 	*pitch = round((*pitch - G_OFF_Y) * 1000.0 / GYRO_SENS) / 1000.0;
-	*yaw = round((*yaw - G_OFF_Z) * 1000.0 / GYRO_SENS) / 1000.0;
+	*yaw   = round((*yaw - G_OFF_Z) * 1000.0 / GYRO_SENS) / 1000.0;
 }
 
 void MPU6050::getAccelRaw(float *x, float *y, float *z) {
+	std::cout << "getAccelRaw" << std::endl;
 	int16_t X = i2c_smbus_read_byte_data(f_dev, 0x3b) << 8 | i2c_smbus_read_byte_data(f_dev, 0x3c); //Read X registers
 	int16_t Y = i2c_smbus_read_byte_data(f_dev, 0x3d) << 8 | i2c_smbus_read_byte_data(f_dev, 0x3e); //Read Y registers
 	int16_t Z = i2c_smbus_read_byte_data(f_dev, 0x3f) << 8 | i2c_smbus_read_byte_data(f_dev, 0x40); //Read Z registers
@@ -68,11 +69,12 @@ void MPU6050::getAccelRaw(float *x, float *y, float *z) {
 	*z = (float)Z;
 }
 
-void MPU6050::getAccel(float *x, float *y, float *z) {
+void MPU6050::getAccel(float *x, float *y, float *z) { // NOLUYOR???
+	std::cout << "getAccel" << std::endl;
 	getAccelRaw(x, y, z); //Store raw values into variables
-	*x = round((*x - A_OFF_X) * 1000.0 / ACCEL_SENS) / 1000.0; //Remove the offset and divide by the accelerometer sensetivity (use 1000 and round() to round the value to three decimal places)
-	*y = round((*y - A_OFF_Y) * 1000.0 / ACCEL_SENS) / 1000.0;
-	*z = round((*z - A_OFF_Z) * 1000.0 / ACCEL_SENS) / 1000.0;
+	*x = ((round((*x - A_OFF_X) * 1000.0 / ACCEL_SENS) / 1000.0)); //Remove the offset and divide by the accelerometer sensetivity (use 1000 and round() to round the value to three decimal places)
+	*y = ((round((*y - A_OFF_Y) * 1000.0 / ACCEL_SENS) / 1000.0)-0.375);
+	*z = ((round((*z - A_OFF_Z) * 1000.0 / ACCEL_SENS) / 1000.0)-0.400);
 }
 
 void MPU6050::getOffsets(float *ax_off, float *ay_off, float *az_off, float *gr_off, float *gp_off, float *gy_off) {
@@ -169,5 +171,7 @@ void MPU6050::_update() { //Main update function - runs continuously
 		clock_gettime(CLOCK_REALTIME, &end); //Save time to end clock
 		dt = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9; //Calculate new dt
 		clock_gettime(CLOCK_REALTIME, &start); //Save time to start clock
+
+		std::cout << _angle[0] << " " << _angle[1] << " " << _angle[2] << std::endl;
 	}
 }

@@ -1,15 +1,13 @@
 CC=g++
 
 DEPS=MPU6050.h
-CFLAGS=-fPIC -Wall -std=c++17
+CFLAGS=-fPIC -Wall -std=c++17 
 
 LIBS=-li2c
 LFLAGS=-shared
 
 OBJ=MPU6050.o
 OLIB=libMPU6050.so
-
-
 
 %.o: %.cpp $(DEPS)
 	$(CC) -c $< -o $@ $(CFLAGS)

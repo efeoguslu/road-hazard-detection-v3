@@ -25,6 +25,7 @@
 
 //Offsets - supply your own here (calculate offsets with getOffsets function)
 //     Accelerometer
+/*
 #define A_OFF_X 19402
 #define A_OFF_Y -2692
 #define A_OFF_Z -8625
@@ -32,6 +33,20 @@
 #define G_OFF_X -733
 #define G_OFF_Y 433
 #define G_OFF_Z -75
+*/
+#define A_OFF_X 20018
+#define A_OFF_Y -8811
+#define A_OFF_Z -15087
+//    Gyroscope
+#define G_OFF_X 291
+#define G_OFF_Y 87
+#define G_OFF_Z 291
+
+/*
+This could take a couple of minutes...Gyroscope R,P,Y: 290.715,87.3382,290.936
+Accelerometer X,Y,Z: 20018,-8811.48,-15087.1
+
+*/
 
 //-----------------------END MODIFY THESE PARAMETERS-----------------------
 
@@ -90,13 +105,14 @@ extern "C" {
 
 class MPU6050 {
 	private:
+		
 		void _update();
 
 		float _accel_angle[3];
 		float _gyro_angle[3];
 		float _angle[3]; //Store all angles (accel roll, accel pitch, accel yaw, gyro roll, gyro pitch, gyro yaw, comb roll, comb pitch comb yaw)
 
-		float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
+		// float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
 
 		int MPU6050_addr;
 		int f_dev; //Device file
@@ -106,7 +122,10 @@ class MPU6050 {
 		struct timespec start,end; //Create a time structure
 
 		bool _first_run = 1; //Variable for whether to set gyro angle to acceleration angle in compFilter
+
 	public:
+
+		float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
 		MPU6050(int8_t addr);
 		MPU6050(int8_t addr, bool run_update_thread);
 		void getAccelRaw(float *x, float *y, float *z);
