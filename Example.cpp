@@ -13,46 +13,16 @@
 // ---------------------------------------------------------------------------------------------
 
 
-
-
 MPU6050 device(0x68, false);
 
-const int windowSize = 50;
+const int windowSize{ 5 };
 std::deque<float> axBuffer;
 
+const double sampleRateHz{ 250 };                  // Sample rate in Hz
+const double loopDurationMs{ 1000 / sampleRateHz}; // Duration of each loop iteration in milliseconds
 
-// ----------------------------------------------------------------------------------------------
-
-/*
-// Base case for the variadic log function
-template<typename T>
-void logData(std::ofstream& logfile, const T& data) {
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-    logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-    logfile << data << std::endl;
-}
-
-// Recursive case for the variadic log function
-template<typename T, typename... Args>
-void logData(std::ofstream& logfile, const T& data, const Args&... args) {
-    // Write the timestamp and the first piece of data
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-    logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-    logfile << data;
-
-    // Check if there are more arguments to log
-    if constexpr (sizeof...(Args) > 0) {
-        logfile << ", "; // Add a comma between data if there are more arguments
-        logData(logfile, args...); // Recur with the remaining arguments
-    } else {
-        logfile << std::endl; // Add a newline character if there are no more arguments
-    }
-}
-*/
+int time2Delay{ 0 };
+float dt{ 0 };
 
 // ----------------------------------------------------------------------------------------------
 
@@ -110,7 +80,7 @@ bool createDirectory(const std::string& path) {
     return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 }
 
-void logSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
+void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
     if (logfile.is_open()) {
         // Get current timestamp
         auto now = std::chrono::system_clock::now();
@@ -126,7 +96,7 @@ void logSensorData(std::ofstream &logfile, float ax, float ay, float az, float g
 }
 
 
-void logAcc(std::ofstream &logfile, float accel) {
+void logSingleSensorData(std::ofstream &logfile, float data) {
     if (logfile.is_open()) {
         /*
         // Get current timestamp
@@ -137,7 +107,7 @@ void logAcc(std::ofstream &logfile, float accel) {
         logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
         */
         logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << accel << std::endl;
+        logfile << data << std::endl;
         
     }
 }
@@ -201,6 +171,29 @@ void logAngles(std::ofstream &logfile, float roll, float pitch) {
     }
 }
 
+void writePlotScript(const std::string& directoryPath) {
+    std::string plotFileName = directoryPath + "/plot.plt";
+    
+    // Open the file in write mode
+    std::ofstream plotFile(plotFileName);
+    
+    // Check if the file was successfully opened
+    if (!plotFile) {
+        std::cerr << "Unable to open file for writing: " << plotFileName << std::endl;
+        return;
+    }
+    
+    // Write the Gnuplot script
+    plotFile << "set terminal pngcairo size 800,600\n"; // Set the output format and size
+    plotFile << "set output 'output.png'\n"; // Set the output file name
+    plotFile << "set title 'My Plot Title'\n"; // Set the plot title
+    plotFile << "set xlabel 'X-Axis Label'\n"; // Set the x-axis label
+    plotFile << "set ylabel 'Y-Axis Label'\n"; // Set the y-axis label
+    plotFile << "plot 'anglesLogFile.txt' using 0:1 with linespoints\n"; // Plot the data
+    
+    // Close the file
+    plotFile.close();
+}
 
 float compoundVector(float x, float y, float z){
   return std::sqrt(x*x + y*y + z*z);
@@ -214,15 +207,26 @@ double movingAverage(const std::vector<double>& data, int windowSize){
     return sum/windowSize;
 }
 
-// ??? Buna sonra bak:
 float roll_angle(float ax, float ay, float az){
-    // return atanf(ay/(std::sqrt(ax*ax + az*az)))*RAD_T_DEG;
-    return atanf(-ax/(std::sqrt(ay*ay + az*az)))*RAD_T_DEG;
-}
-float pitch_angle(float ax, float ay, float az){
-    // return atanf(-ax/(std::sqrt(ay*ay + az*az)))*RAD_T_DEG;
     return atanf(ay/(std::sqrt(ax*ax + az*az)))*RAD_T_DEG;
 }
+float pitch_angle(float ax, float ay, float az){
+    return atanf(-ax/(std::sqrt(ay*ay + az*az)))*RAD_T_DEG;
+}
+
+
+/*
+void compFilter(float dt, float tau, float ax, float ay, float az, float gr, float gp, float gy) {
+
+  // Complementary filter
+  float accelPitch = atan2(ay, az) * RAD_T_DEG;
+  float accelRoll  = atan2(ax, az) * RAD_T_DEG;
+
+  attitude.roll = (tau)*(attitude.roll - imu_cal.gy*dt) + (1-tau)*(accelRoll);
+  attitude.pitch = (tau)*(attitude.pitch + imu_cal.gx*dt) + (1-tau)*(accelPitch);
+  attitude.yaw += imu_cal.gz*dt;
+}
+*/
 
 int main() {    
 
@@ -254,12 +258,15 @@ int main() {
     std::ofstream azLogFile(directoryPath + "azLogFile.txt");
 
     std::ofstream grLogFile(directoryPath + "grLogFile.txt");
-    std::ofstream gpLogFile(directoryPath + "gpLogFile.txt");    
+    std::ofstream gpLogFile(directoryPath + "gpLogFile.txt");
+    std::ofstream gyLogFile(directoryPath + "gyLogFile.txt");     
     
     std::ofstream anglesLogFile(directoryPath + "anglesLogFile.txt");
     std::ifstream inputForFilter(directoryPath +  "inputForFilter.txt");
     std::ofstream axFilteredLogFile(directoryPath +  "axFilteredLogFile.txt");
     std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
+
+    writePlotScript(directoryPath);
 
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() || !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() || !azLogFile.is_open() || !anglesLogFile.is_open()) {
@@ -271,18 +278,21 @@ int main() {
     //Read the current yaw angle
     device.calc_yaw = true;
     //Get bump count
-    auto bumpCounter = 0;
+    auto bumpCounter{0};
 
 
     // Instead of true, use buttons for start/stop
     while(true){
+
+        // Record loop time stamp
+		auto startTime{std::chrono::high_resolution_clock::now()};
 
         //Get the current accelerometer values
         device.getAccel(&ax, &ay, &az);
         //Get the current gyroscope values
         device.getGyro(&gr, &gp, &gy);
 
-        auto timestamp = getCurrentTimestamp();
+        auto timestamp {getCurrentTimestamp()};
 
         // Most of the algorithmic changes will be made here:
         if(compoundVector(ax, ay, az) >= 3.0f && compoundVector(gr, gp, gy) >= 12.0f){
@@ -297,6 +307,8 @@ int main() {
 
         std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
 
+        // float phiDot_rps = gr + tanf()
+
         std::cout 
               << "AccX (m/s^2): "         << std::setw(8) << ax
               << " AccY (m/s^2): "        << std::setw(8) << ay 
@@ -304,7 +316,9 @@ int main() {
               << " Roll Rate (deg/s): "   << std::setw(8) << gr
               << " Pitch Rate (deg/s): "  << std::setw(8) << gp
               << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
+        
 
+        // -------------------------------------------------------------------------------------------------------------------------
 
         /*
         std::cout 
@@ -314,7 +328,9 @@ int main() {
               << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
               << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
         */
-       
+
+        // -------------------------------------------------------------------------------------------------------------------------
+
         /*
         std::cout 
               << "Roll Angle (deg): "     << std::setw(8) << roll_angle(ax, ay, az)
@@ -324,18 +340,14 @@ int main() {
               << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
         */
 
-        /*
-        std::cout 
-              << "getAngleRoll: "         << std::setw(8) << ax
-              << " getAnglePitch: "        << std::setw(8) << ay 
-              << " getAngleYaw: "        << std::setw(8) << az
-              << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
-              << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
-        */
+        // -------------------------------------------------------------------------------------------------------------------------
 
-        logAcc(axLogFile, ax);
-        logAcc(ayLogFile, ay);
-        logAcc(azLogFile, az);
+        std::vector<std::ofstream*> logFiles = {&axLogFile, &ayLogFile, &azLogFile, &grLogFile, &gpLogFile, &gyLogFile};
+        std::vector<float> data = {ax, ay, az, gr, gp, gy}; 
+
+        for (size_t i = 0; i < logFiles.size(); ++i) {
+            logSingleSensorData(*logFiles[i], data[i]);
+        }
 
         //logData(axCalLogFile, ax);
         //logData(ayCalLogFile, ay);
@@ -344,15 +356,22 @@ int main() {
         logAngles(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
         //logData(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
         
-        logSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
+        logAllSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
         //logCompoundData(compoundVectorLogFile, compoundVector(ax, ay, az), compoundVector(gr, gp, gy));
         //logNormalizedAccelData(normalizedAccelLogFile, ax, ay, az);
 
         updateAndLogMovingAverage(axFilteredLogFile, ax);
         
+        
+        auto endTime{std::chrono::high_resolution_clock::now()};
+        auto duration{std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count()};
 
-        usleep(10000);
+        auto delayMs{static_cast<long>(loopDurationMs - duration)};
+
+        if (delayMs > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+        }
     }
 
 	return 0;
