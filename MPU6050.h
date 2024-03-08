@@ -34,17 +34,21 @@
 #define G_OFF_Y 433
 #define G_OFF_Z -75
 */
-#define A_OFF_X 20018
-#define A_OFF_Y -8811
-#define A_OFF_Z -15087
+#define A_OFF_X (20077.7)
+#define A_OFF_Y (-8989.97)
+#define A_OFF_Z (-15068.1)
 //    Gyroscope
-#define G_OFF_X 291
-#define G_OFF_Y 87
-#define G_OFF_Z 291
+#define G_OFF_X (293.735)
+#define G_OFF_Y (78.6624)
+#define G_OFF_Z (292.178)
 
 /*
 This could take a couple of minutes...Gyroscope R,P,Y: 290.715,87.3382,290.936
 Accelerometer X,Y,Z: 20018,-8811.48,-15087.1
+
+    This could take a couple of minutes...Gyroscope R,P,Y: 293.735,78.6624,292.178
+Accelerometer X,Y,Z: 20077.7,-8989.97,-15068.1
+
 
 */
 

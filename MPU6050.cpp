@@ -60,7 +60,7 @@ void MPU6050::getGyro(float *roll, float *pitch, float *yaw) {
 }
 
 void MPU6050::getAccelRaw(float *x, float *y, float *z) {
-	std::cout << "getAccelRaw" << std::endl;
+	//std::cout << "getAccelRaw" << std::endl;
 	int16_t X = i2c_smbus_read_byte_data(f_dev, 0x3b) << 8 | i2c_smbus_read_byte_data(f_dev, 0x3c); //Read X registers
 	int16_t Y = i2c_smbus_read_byte_data(f_dev, 0x3d) << 8 | i2c_smbus_read_byte_data(f_dev, 0x3e); //Read Y registers
 	int16_t Z = i2c_smbus_read_byte_data(f_dev, 0x3f) << 8 | i2c_smbus_read_byte_data(f_dev, 0x40); //Read Z registers
@@ -70,11 +70,11 @@ void MPU6050::getAccelRaw(float *x, float *y, float *z) {
 }
 
 void MPU6050::getAccel(float *x, float *y, float *z) { // NOLUYOR???
-	std::cout << "getAccel" << std::endl;
+	//std::cout << "getAccel" << std::endl;
 	getAccelRaw(x, y, z); //Store raw values into variables
 	*x = ((round((*x - A_OFF_X) * 1000.0 / ACCEL_SENS) / 1000.0)); //Remove the offset and divide by the accelerometer sensetivity (use 1000 and round() to round the value to three decimal places)
-	*y = ((round((*y - A_OFF_Y) * 1000.0 / ACCEL_SENS) / 1000.0)-0.375);
-	*z = ((round((*z - A_OFF_Z) * 1000.0 / ACCEL_SENS) / 1000.0)-0.400);
+	*y = ((round((*y - A_OFF_Y) * 1000.0 / ACCEL_SENS) / 1000.0));
+	*z = ((round((*z - A_OFF_Z) * 1000.0 / ACCEL_SENS) / 1000.0));
 }
 
 void MPU6050::getOffsets(float *ax_off, float *ay_off, float *az_off, float *gr_off, float *gp_off, float *gy_off) {

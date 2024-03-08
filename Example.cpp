@@ -7,6 +7,7 @@
 #include <vector>
 #include <deque>
 #include <numeric>
+#include <sys/stat.h>
 #include "MPU6050.h"
 
 // ---------------------------------------------------------------------------------------------
@@ -22,34 +23,36 @@ std::deque<float> axBuffer;
 
 // ----------------------------------------------------------------------------------------------
 
-// Forward declaration of the log function
-template<typename T, typename... Args>
-void logData(std::ofstream& logfile, const T& data, const Args&... args);
-
+/*
 // Base case for the variadic log function
 template<typename T>
 void logData(std::ofstream& logfile, const T& data) {
-    if (logfile.is_open()) {
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << data << std::endl;
-    }
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
+    logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
+    logfile << data << std::endl;
 }
 
 // Recursive case for the variadic log function
 template<typename T, typename... Args>
 void logData(std::ofstream& logfile, const T& data, const Args&... args) {
-    if (logfile.is_open()) {
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << data << ", ";
+    // Write the timestamp and the first piece of data
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
+    logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
+    logfile << data;
+
+    // Check if there are more arguments to log
+    if constexpr (sizeof...(Args) > 0) {
+        logfile << ", "; // Add a comma between data if there are more arguments
+        logData(logfile, args...); // Recur with the remaining arguments
+    } else {
+        logfile << std::endl; // Add a newline character if there are no more arguments
     }
-    logData(logfile, args...); // Recur with the remaining arguments
 }
+*/
 
 // ----------------------------------------------------------------------------------------------
 
@@ -101,6 +104,10 @@ std::string getCurrentTimestamp() {
     std::stringstream ss;
     ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d_%H-%M-%S");
     return ss.str();
+}
+
+bool createDirectory(const std::string& path) {
+    return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 }
 
 void logSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
@@ -207,13 +214,14 @@ double movingAverage(const std::vector<double>& data, int windowSize){
     return sum/windowSize;
 }
 
-
+// ??? Buna sonra bak:
 float roll_angle(float ax, float ay, float az){
-    return atanf(ay/(std::sqrt(ax*ax + az*az)))*RAD_T_DEG;
-}
-
-float pitch_angle(float ax, float ay, float az){
+    // return atanf(ay/(std::sqrt(ax*ax + az*az)))*RAD_T_DEG;
     return atanf(-ax/(std::sqrt(ay*ay + az*az)))*RAD_T_DEG;
+}
+float pitch_angle(float ax, float ay, float az){
+    // return atanf(-ax/(std::sqrt(ay*ay + az*az)))*RAD_T_DEG;
+    return atanf(ay/(std::sqrt(ax*ax + az*az)))*RAD_T_DEG;
 }
 
 int main() {    
@@ -226,36 +234,45 @@ int main() {
     float ax, ay, az, gr, gp, gy; //Variables to store the accel, gyro and angle values
     sleep(1); //Wait for the MPU6050 to stabilize
 
+
     auto timestamp = getCurrentTimestamp();
+    auto directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
+    
+    if (!createDirectory(directoryPath)) {
+        std::cerr << "Error: Unable to create directory." << std::endl;
+        return -1;
+    }
 
     // Input/Output Files:
 
+    std::ofstream sensorLogFile(directoryPath + "sensorLogFile.txt");
+    std::ofstream compoundVectorLogFile(directoryPath + "compoundVectorLogFile.txt");
+    std::ofstream bumpCountLogFile(directoryPath + "bumpCountLogFile.txt");
+
+    std::ofstream axLogFile(directoryPath + "axLogFile.txt");
+    std::ofstream ayLogFile(directoryPath + "ayLogFile.txt");
+    std::ofstream azLogFile(directoryPath + "azLogFile.txt");
+
+    std::ofstream grLogFile(directoryPath + "grLogFile.txt");
+    std::ofstream gpLogFile(directoryPath + "gpLogFile.txt");    
     
-    std::ofstream sensorLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_sensor_data_log.txt");
-    std::ofstream compoundVectorLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_compound_vector.txt");
-    std::ofstream bumpCountLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_bump_count_log.txt");
+    std::ofstream anglesLogFile(directoryPath + "anglesLogFile.txt");
+    std::ifstream inputForFilter(directoryPath +  "inputForFilter.txt");
+    std::ofstream axFilteredLogFile(directoryPath +  "axFilteredLogFile.txt");
+    std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
 
-    std::ofstream axCalLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ax_cal_log.txt");
-    std::ofstream ayCalLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ay_cal_log.txt");
-    std::ofstream azCalLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_az_cal_log.txt");
-
-    std::ofstream anglesLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_angles_log.txt");
-
-    std::ifstream inputForFilter("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ax_cal_log.txt");
-    std::ofstream axFilteredLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_ax_filtered_log.txt");
-
-    std::ofstream normalizedAccelLogFile("/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "_normalized_accel_log.txt");
-
-    if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axCalLogFile.is_open() || !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayCalLogFile.is_open() || !azCalLogFile.is_open() || !anglesLogFile.is_open()) {
+    /*
+    if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() || !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() || !azLogFile.is_open() || !anglesLogFile.is_open()) {
         std::cerr << "Error: Unable to open log files." << std::endl;
         return -1;
     }
-    
+    */
 
     //Read the current yaw angle
     device.calc_yaw = true;
     //Get bump count
     auto bumpCounter = 0;
+
 
     // Instead of true, use buttons for start/stop
     while(true){
@@ -268,43 +285,74 @@ int main() {
         auto timestamp = getCurrentTimestamp();
 
         // Most of the algorithmic changes will be made here:
-        
-        
         if(compoundVector(ax, ay, az) >= 3.0f && compoundVector(gr, gp, gy) >= 12.0f){
             bumpCounter++;
             std::cout << "Bump Count: " << bumpCounter << "\n";
-            // logBumpCount(bumpCountLogFile, bumpCounter);
-            logData(bumpCountLogFile, bumpCounter);
+            logBumpCount(bumpCountLogFile, bumpCounter);
+            // logData(bumpCountLogFile, bumpCounter);
         }
         
 
         //std::cout << "Time: " << timestamp << " Accel: " << ax << ", Y: " << ay << ", Z: " << az << " Bump Counter: " << bumpCounter << "\n"; 
-        std::cout << std::fixed << std::setprecision(3) << std::setw(15);
 
-        // Print accelerometer data
-        std::cout << ax << " " << ay << " " << az << " " << roll_angle(ax, ay, az) << " " << pitch_angle(ax, ay, az) << std::endl;
+        std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
+
+        std::cout 
+              << "AccX (m/s^2): "         << std::setw(8) << ax
+              << " AccY (m/s^2): "        << std::setw(8) << ay 
+              << " AccZ (m/s^2): "        << std::setw(8) << az
+              << " Roll Rate (deg/s): "   << std::setw(8) << gr
+              << " Pitch Rate (deg/s): "  << std::setw(8) << gp
+              << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
 
 
-        //logAcc(axCalLogFile, ax);
-        //logAcc(ayCalLogFile, ay);
-        //logAcc(azCalLogFile, az);
+        /*
+        std::cout 
+              << "AccX (m/s^2): "         << std::setw(8) << ax
+              << " AccY (m/s^2): "        << std::setw(8) << ay 
+              << " AccZ (m/s^2): "        << std::setw(8) << az
+              << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
+              << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
+        */
+       
+        /*
+        std::cout 
+              << "Roll Angle (deg): "     << std::setw(8) << roll_angle(ax, ay, az)
+              << " Roll Rate (deg/s): "   << std::setw(8) << gr
+              << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az)
+              << " Pitch Rate (deg/s): "  << std::setw(8) << gp
+              << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
+        */
 
-        logData(axCalLogFile, ax);
-        logData(ayCalLogFile, ay);
-        logData(azCalLogFile, az);
+        /*
+        std::cout 
+              << "getAngleRoll: "         << std::setw(8) << ax
+              << " getAnglePitch: "        << std::setw(8) << ay 
+              << " getAngleYaw: "        << std::setw(8) << az
+              << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
+              << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
+        */
 
-        //logAngles(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
-        logData(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
+        logAcc(axLogFile, ax);
+        logAcc(ayLogFile, ay);
+        logAcc(azLogFile, az);
+
+        //logData(axCalLogFile, ax);
+        //logData(ayCalLogFile, ay);
+        //logData(azCalLogFile, az);
+
+        logAngles(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
+        //logData(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
         
-        //logSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
+        logSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
         //logCompoundData(compoundVectorLogFile, compoundVector(ax, ay, az), compoundVector(gr, gp, gy));
         //logNormalizedAccelData(normalizedAccelLogFile, ax, ay, az);
 
-        //updateAndLogMovingAverage(axFilteredLogFile, ax);
+        updateAndLogMovingAverage(axFilteredLogFile, ax);
         
 
-        usleep(1000000);
+        usleep(10000);
     }
 
 	return 0;
