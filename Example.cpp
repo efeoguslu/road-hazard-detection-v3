@@ -26,23 +26,33 @@ float dt{ 0 };
 
 // ----------------------------------------------------------------------------------------------
 
-void updateAndLogMovingAverage(std::ofstream &axFilteredLogFile, float ax) {
-    // Add the new value to the buffer
-    axBuffer.push_back(ax);
+template<typename T>
+class MovingAverage {
+private:
+    std::deque<T> buffer;
+    size_t windowSize;
+public:
+    MovingAverage(size_t size) : windowSize(size) {}
 
-    // If the buffer size exceeds the window size, remove the oldest value
-    if (axBuffer.size() > windowSize) {
-        axBuffer.pop_front();
+    void updateAndLogMovingAverage(std::ofstream &logFile, T newValue) {
+        // Add the new value to the buffer
+        buffer.push_back(newValue);
+
+        // If the buffer size exceeds the window size, remove the oldest value
+        if (buffer.size() > windowSize) {
+            buffer.pop_front();
+        }
+
+        // Calculate the moving average based on the current buffer contents
+        double sum = std::accumulate(buffer.begin(), buffer.end(), 0.0);
+        double movingAvg = sum / buffer.size();
+
+        // Write the moving average to the output file
+        logFile << movingAvg << "\n";
+        logFile.flush(); // Flush the output buffer to ensure data is written immediately
     }
+};
 
-    // Calculate the moving average based on the current buffer contents
-    double sum = std::accumulate(axBuffer.begin(), axBuffer.end(), 0.0);
-    double movingAvg = sum / axBuffer.size();
-
-    // Write the moving average to the output file
-    axFilteredLogFile << movingAvg << "\n";
-    axFilteredLogFile.flush(); // Flush the output buffer to ensure data is written immediately
-}
 
 
 bool toggleFlag() {
@@ -172,7 +182,7 @@ void logAngles(std::ofstream &logfile, float roll, float pitch) {
 }
 
 void writePlotScript(const std::string& directoryPath) {
-    std::string plotFileName = directoryPath + "/plot.plt";
+    std::string plotFileName = directoryPath + "/plot.gp";
     
     // Open the file in write mode
     std::ofstream plotFile(plotFileName);
@@ -182,14 +192,32 @@ void writePlotScript(const std::string& directoryPath) {
         std::cerr << "Unable to open file for writing: " << plotFileName << std::endl;
         return;
     }
+
+    /*
+    # Set the title of the plot
+set title "Sensor Data Comparison"
+
+# Set labels for x and y axes
+set xlabel "Time"
+set ylabel "Value"
+
+# Set the output file format and name
+set terminal png
+set output "sensor_data_comparison.png"
+
+# Plot the data from the first .txt file
+plot "axLogFile.txt" with lines title "Sensor 1", \
+     "axFilteredLogFile.txt" with lines title "Sensor 2"
+    */
     
     // Write the Gnuplot script
-    plotFile << "set terminal pngcairo size 800,600\n"; // Set the output format and size
-    plotFile << "set output 'output.png'\n"; // Set the output file name
-    plotFile << "set title 'My Plot Title'\n"; // Set the plot title
-    plotFile << "set xlabel 'X-Axis Label'\n"; // Set the x-axis label
-    plotFile << "set ylabel 'Y-Axis Label'\n"; // Set the y-axis label
-    plotFile << "plot 'anglesLogFile.txt' using 0:1 with linespoints\n"; // Plot the data
+    plotFile << "set title 'Sensor Data Comparison'\n"; // Set the output format and size
+    plotFile << "set xlabel 'Time'\n"; // Set the output file name
+    plotFile << "set ylabel 'Value'\n"; // Set the plot title
+    plotFile << "set terminal png\n"; // Set the x-axis label
+    plotFile << "set output 'sensor_data_comparison.png'\n"; // Set the y-axis label
+    plotFile << "plot 'axLogFile.txt' with lines title 'Sensor 1', \\n"; // Plot the data
+    plotFile << "'axFilteredLogFile.txt' with lines title 'Sensor 2'\n"; // Plot the data
     
     // Close the file
     plotFile.close();
@@ -235,6 +263,7 @@ int main() {
         return 0;
     }
 
+
     float ax, ay, az, gr, gp, gy; //Variables to store the accel, gyro and angle values
     sleep(1); //Wait for the MPU6050 to stabilize
 
@@ -263,8 +292,12 @@ int main() {
     
     std::ofstream anglesLogFile(directoryPath + "anglesLogFile.txt");
     std::ifstream inputForFilter(directoryPath +  "inputForFilter.txt");
+
     std::ofstream axFilteredLogFile(directoryPath +  "axFilteredLogFile.txt");
-    std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
+    std::ofstream ayFilteredLogFile(directoryPath +  "ayFilteredLogFile.txt");
+    std::ofstream azFilteredLogFile(directoryPath +  "azFilteredLogFile.txt");
+
+    // std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
 
     writePlotScript(directoryPath);
 
@@ -280,12 +313,14 @@ int main() {
     //Get bump count
     auto bumpCounter{0};
 
+    MovingAverage<float> axMovingAvg(windowSize);
+    MovingAverage<float> ayMovingAvg(windowSize);
+    MovingAverage<float> azMovingAvg(windowSize);
 
     // Instead of true, use buttons for start/stop
     while(true){
-
         // Record loop time stamp
-		auto startTime{std::chrono::high_resolution_clock::now()};
+        auto startTime{std::chrono::high_resolution_clock::now()};
 
         //Get the current accelerometer values
         device.getAccel(&ax, &ay, &az);
@@ -308,36 +343,36 @@ int main() {
         std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
 
         // float phiDot_rps = gr + tanf()
-
-        std::cout 
-              << "AccX (m/s^2): "         << std::setw(8) << ax
-              << " AccY (m/s^2): "        << std::setw(8) << ay 
-              << " AccZ (m/s^2): "        << std::setw(8) << az
-              << " Roll Rate (deg/s): "   << std::setw(8) << gr
-              << " Pitch Rate (deg/s): "  << std::setw(8) << gp
-              << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
-        
-
-        // -------------------------------------------------------------------------------------------------------------------------
-
         /*
         std::cout 
-              << "AccX (m/s^2): "         << std::setw(8) << ax
-              << " AccY (m/s^2): "        << std::setw(8) << ay 
-              << " AccZ (m/s^2): "        << std::setw(8) << az
-              << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
-              << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
+            << "AccX (m/s^2): "         << std::setw(8) << ax
+            << " AccY (m/s^2): "        << std::setw(8) << ay 
+            << " AccZ (m/s^2): "        << std::setw(8) << az
+            << " Roll Rate (deg/s): "   << std::setw(8) << gr
+            << " Pitch Rate (deg/s): "  << std::setw(8) << gp
+            << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
         */
 
         // -------------------------------------------------------------------------------------------------------------------------
 
         /*
         std::cout 
-              << "Roll Angle (deg): "     << std::setw(8) << roll_angle(ax, ay, az)
-              << " Roll Rate (deg/s): "   << std::setw(8) << gr
-              << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az)
-              << " Pitch Rate (deg/s): "  << std::setw(8) << gp
-              << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
+            << "AccX (m/s^2): "         << std::setw(8) << ax
+            << " AccY (m/s^2): "        << std::setw(8) << ay 
+            << " AccZ (m/s^2): "        << std::setw(8) << az
+            << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
+            << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
+        */
+
+        // -------------------------------------------------------------------------------------------------------------------------
+
+        /*
+        std::cout 
+            << "Roll Angle (deg): "     << std::setw(8) << roll_angle(ax, ay, az)
+            << " Roll Rate (deg/s): "   << std::setw(8) << gr
+            << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az)
+            << " Pitch Rate (deg/s): "  << std::setw(8) << gp
+            << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
         */
 
         // -------------------------------------------------------------------------------------------------------------------------
@@ -349,20 +384,16 @@ int main() {
             logSingleSensorData(*logFiles[i], data[i]);
         }
 
-        //logData(axCalLogFile, ax);
-        //logData(ayCalLogFile, ay);
-        //logData(azCalLogFile, az);
-
         logAngles(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
-        //logData(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
         
         logAllSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
-        //logCompoundData(compoundVectorLogFile, compoundVector(ax, ay, az), compoundVector(gr, gp, gy));
-        //logNormalizedAccelData(normalizedAccelLogFile, ax, ay, az);
+        logCompoundData(compoundVectorLogFile, compoundVector(ax, ay, az), compoundVector(gr, gp, gy));
 
-        updateAndLogMovingAverage(axFilteredLogFile, ax);
-        
+        axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
+        ayMovingAvg.updateAndLogMovingAverage(ayFilteredLogFile, ay);
+        azMovingAvg.updateAndLogMovingAverage(azFilteredLogFile, az);
+
         
         auto endTime{std::chrono::high_resolution_clock::now()};
         auto duration{std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count()};
@@ -372,8 +403,10 @@ int main() {
         if (delayMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
         }
+        
     }
-
+        
+    
 	return 0;
 }
 
