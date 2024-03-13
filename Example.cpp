@@ -19,12 +19,13 @@ MPU6050 device(0x68, false);
 
 const int windowSize{ 5 };
 
-const int sampleRateHz{ 5 };                  // Sample rate in Hz
+const int sampleRateHz{ 100 };                  // Sample rate in Hz
 const int loopDurationMs{ 1000 / sampleRateHz }; // Duration of each loop iteration in milliseconds
 
 const float gravity_mps2{ 9.80665 };
-const float tau{ 0.98 };
+const float tau{ 0.02 };
 const float radiansToDegrees{ 57.2957795 };
+const float degreesToRadians{ 0.0174532925 };
 
 
 int time2Delay{ 0 };
@@ -257,19 +258,8 @@ float getPitchAngle(float ax, float ay, float az){
 // -----
 
 
+
 /*
-void compFilter(float dt, float tau, float ax, float ay, float az, float gr, float gp, float gy) {
-
-  // Complementary filter
-  float accelPitch = atan2(ay, az) * radiansToDegrees;
-  float accelRoll  = atan2(ax, az) * radiansToDegrees;
-
-  attitude.roll = (tau)*(attitude.roll - imu_cal.gy*dt) + (1-tau)*(accelRoll);
-  attitude.pitch = (tau)*(attitude.pitch + imu_cal.gx*dt) + (1-tau)*(accelPitch);
-  attitude.yaw += imu_cal.gz*dt;
-}
-*/
-
 // ***** spherical:
 
 template <typename T> int sgn(T val){
@@ -284,18 +274,27 @@ float azimuth(float x, float y){
     return sgn(y)*acosf(x/std::sqrt(x*x + y*y));
 }
 
-void rotate(float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
+*/
+
+void rotatePitch(float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
     *ax_rotated = ax*cosf(pitchAngle) - az*sinf(pitchAngle);
     *ay_rotated = ay;
     *az_rotated = ax*sinf(pitchAngle) + az*cosf(pitchAngle);
 }
 
-void rotateAll(float pitchAngle, float rollAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
+void rotateAll1(float pitchAngle, float rollAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
     *ax_rotated = ax*cosf(pitchAngle) - az*sinf(pitchAngle);
     *ay_rotated = ax*sinf(pitchAngle)*sinf(rollAngle) + ay*cosf(rollAngle) + az*sinf(rollAngle)*cosf(pitchAngle);
     *az_rotated = ax*sinf(pitchAngle)*cosf(rollAngle) - ay*sinf(rollAngle) + az*cosf(rollAngle)*cosf(pitchAngle);
 }
 
+
+
+void rotateAll(float rollAngle, float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
+    *ax_rotated = ax*cosf(pitchAngle) + az*sinf(pitchAngle);
+    *ay_rotated = ax*sinf(rollAngle)*sinf(pitchAngle) + ay*cosf(rollAngle) - az*sinf(rollAngle)*cosf(pitchAngle);
+    *az_rotated = -ax*sinf(pitchAngle)*cosf(rollAngle) + ay*sinf(rollAngle) + az*cosf(rollAngle)*cosf(pitchAngle);
+}
 
 // Time stabilization function
 float timeSync(auto t1){
@@ -315,21 +314,58 @@ float timeSync(auto t1){
 	return dt;
 }
 
-// BURADASIN!!! Kontrol et.
 
-void compFilter(float dt, float tau, float* pitchAngle, float* rollAngle, float ax, float ay, float az, float gr, float gp, float gy) {
 
-  // Complementary filter
-  float accelPitchAngle = atan2(ay, az) * radiansToDegrees;
-  float accelRollAngle  = atan2(ax, az) * radiansToDegrees;
+void complementaryFilter(float ax, float ay, float az, float gr, float gp, float gy, float* rollAngle, float* pitchAngle){
+	//X (roll) axis
+	device._accel_angle[0] = atan2(az, ay) * RAD_T_DEG - 90.0; //Calculate the angle with z and y convert to degrees and subtract 90 degrees to rotate
+	device._gyro_angle[0] = device._angle[0] + gr*dt; //Use roll axis (X axis)
+	//Y (pitch) axis
+	device._accel_angle[1] = atan2(az, ax) * RAD_T_DEG - 90.0; //Calculate the angle with z and x convert to degrees and subtract 90 degrees to rotate
+	device._gyro_angle[1] = device._angle[1] + gp*dt; //Use pitch axis (Y axis)
+	//Z (yaw) axis
+	if (device.calc_yaw) {
+		device._gyro_angle[2] = device._angle[2] + gy*dt; //Use yaw axis (Z axis)
+	}
+	if (device._first_run) { //Set the gyroscope angle reference point if this is the first function run
+		for (int i = 0; i <= 1; i++) {
+			device._gyro_angle[i] = device._accel_angle[i]; //Start off with angle from accelerometer (absolute angle since gyroscope is relative)
+		}
+		device._gyro_angle[2] = 0; //Set the yaw axis to zero (because the angle cannot be calculated with the accelerometer when vertical)
+		device._first_run = 0;
+	}
+	float asum = abs(ax) + abs(ay) + abs(az); //Calculate the sum of the accelerations
+	float gsum = abs(gr) + abs(gp) + abs(gy); //Calculate the sum of the gyro readings
+	for (int i = 0; i <= 1; i++) { //Loop through roll and pitch axes
+		if (abs(device._gyro_angle[i] - device._accel_angle[i]) > 5) { //Correct for very large drift (or incorrect measurment of gyroscope by longer loop time)
+			device._gyro_angle[i] = device._accel_angle[i];
+		}
+		//Create result from either complementary filter or directly from gyroscope or accelerometer depending on conditions
+		if (asum > 0.1 && asum < 3 && gsum > 0.3) { //Check that th movement is not very high (therefore providing inacurate angles)
+			device._angle[i] = (1 - TAU)*(device._gyro_angle[i]) + (TAU)*(device._accel_angle[i]); //Calculate the angle using a complementary filter
+		}
+		else if (gsum > 0.3) { //Use the gyroscope angle if the acceleration is high
+			device._angle[i] = device._gyro_angle[i];
+		}
+		else if (gsum <= 0.3) { //Use accelerometer angle if not much movement
+			device._angle[i] = device._accel_angle[i];
+		}
+	}
+	//The yaw axis will not work with the accelerometer angle, so only use gyroscope angle
+	if (device.calc_yaw) { //Only calculate the angle when we want it to prevent large drift
+		device._angle[2] = device._gyro_angle[2];
+	}
+	else {
+		device._angle[2] = 0;
+		device._gyro_angle[2] = 0;
+	}
 
-  *rollAngle = (tau)*(*rollAngle - gp*dt) + (1-tau)*(accelRollAngle);
-  *pitchAngle = (tau)*(*pitchAngle + gr*dt) + (1-tau)*(accelPitchAngle);
+    *rollAngle = device._angle[0];
+    *pitchAngle = device._angle[1];
+
 }
 
-
-int main() {    
-
+int main() {     
     
     if(!toggleFlag()){
         std::cout << "Logging has already occured. Exiting. (Flag == 0)" << std::endl;
@@ -392,7 +428,7 @@ int main() {
     */
 
     //Read the current yaw angle
-    device.calc_yaw = true;
+    device.calc_yaw = false;
     //Get bump count
     auto bumpCounter{0};
 
@@ -406,11 +442,8 @@ int main() {
     float phiHat_rad{ 0 };
 
     float pitchAngleComp{ 0.0f };
-    float rollAngleComp{ 0.0f };
+    float rollAngleComp{ 0.0f };    
 
-    
-
-    // Instead of true, use buttons for start/stop
     while(true){
         // Record loop time stamp
         auto startTime{std::chrono::high_resolution_clock::now()};
@@ -421,20 +454,23 @@ int main() {
         //Get the current gyroscope values
         device.getGyro(&gr, &gp, &gy);
 
-        //Get the current roll and pitch angles
+        //Get the current roll and pitch angles using the formula
         float pitchAngleFormula = getPitchAngle(ax, ay, az);
         float rollAngleFormula = getRollAngle(ax, ay, az);
 
+        //Get the current roll and pitch angles using complementary filter
+        complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngleComp, &pitchAngleComp);
         
 
         //Get compound acceleration and gyro vector
         float compoundAccelerationVector = compoundVector(ax, ay, az);
         float compoundGyroVector = compoundVector(gr, gp, gy);
         
-        compFilter(dt, tau, &pitchAngleComp, &rollAngleComp, ax, ay, az, gr, gp, gy);
+        // compFilter(dt, tau, &pitchAngleComp, &rollAngleComp, ax, ay, az, gr, gp, gy);
 
-        // rotateAll(pitchAngle, rollAngle, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
-
+        // Rotation:
+        rotateAll(rollAngleComp*degreesToRadians, pitchAngleComp*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
+        // rotatePitch(pitchAngleFormula, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
 
 
 
@@ -554,7 +590,7 @@ int main() {
 
         const int width = 5;
         
-        /*
+        
         std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
         std::cout 
             << "AccX (m/s^2): "         << std::setw(width) << ax << " | "
@@ -563,10 +599,12 @@ int main() {
             << " AccX (rotated) (m/s^2): "         << std::setw(width) << ax_rotated << " | "
             << " AccY (rotated) (m/s^2): "        << std::setw(width) << ay_rotated << " | "
             << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
-            << " Pitch Angle (deg): "   << std::setw(width) << pitchAngleComp << " | "
-            << " Roll Angle (deg): " << std::setw(width) << rollAngleComp << std::endl;
+            << " Roll Angle (deg): "   << std::setw(width) << rollAngleComp << " | "
+            << " Pitch Angle (deg): " << std::setw(width) << pitchAngleComp << std::endl;
         
-        */
+        
+         
+        /*
 
         std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
         std::cout 
@@ -577,6 +615,11 @@ int main() {
             << " Pitch Angle Comp: "   << std::setw(width) << pitchAngleComp << " | "
             << " Roll Angle Formula: " << std::setw(width) << rollAngleFormula << " | "
             << " Roll Angle Comp: " << std::setw(width) << rollAngleComp << std::endl;
+
+
+        */
+
+        
         
         
 
@@ -605,7 +648,7 @@ int main() {
         */
 
 
-        /*
+        
 
         auto endTime{std::chrono::high_resolution_clock::now()};
         auto duration{std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count()};
@@ -616,13 +659,15 @@ int main() {
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
         }
         
-        */
+        
         
         
 
-       dt = timeSync(startTime);
+       // dt = timeSync(startTime);
         
     }
+
+
         
     
 	return 0;

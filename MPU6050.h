@@ -110,6 +110,29 @@ extern "C" {
 class MPU6050 {
 	private:
 		
+		/*
+		void _update();
+
+		float _accel_angle[3];
+		float _gyro_angle[3];
+		float _angle[3]; //Store all angles (accel roll, accel pitch, accel yaw, gyro roll, gyro pitch, gyro yaw, comb roll, comb pitch comb yaw)
+
+		// float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
+
+		int MPU6050_addr;
+		int f_dev; //Device file
+
+		float dt; //Loop time (recalculated with each loop)
+
+		struct timespec start,end; //Create a time structure
+
+		bool _first_run = 1; //Variable for whether to set gyro angle to acceleration angle in compFilter
+		
+		*/
+		
+
+	public:
+
 		void _update();
 
 		float _accel_angle[3];
@@ -127,7 +150,7 @@ class MPU6050 {
 
 		bool _first_run = 1; //Variable for whether to set gyro angle to acceleration angle in compFilter
 
-	public:
+
 
 		//void _update();
 		float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
