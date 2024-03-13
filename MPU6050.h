@@ -70,7 +70,7 @@ extern "C" {
 #define _POSIX_C_SOURCE 200809L //Used for calculating time
 
 #define TAU 0.05 //Complementary filter percentage
-#define RAD_T_DEG 57.29577951308 //Radians to degrees (180/PI)
+#define RAD_T_DEG 57.2957795
 
 //Select the appropriate settings
 #if GYRO_RANGE == 1
@@ -129,6 +129,7 @@ class MPU6050 {
 
 	public:
 
+		//void _update();
 		float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
 		MPU6050(int8_t addr);
 		MPU6050(int8_t addr, bool run_update_thread);

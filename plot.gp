@@ -3,4 +3,4 @@ set output 'output.png'
 set title 'My Plot Title'
 set xlabel 'X-Axis Label'
 set ylabel 'Y-Axis Label'
-plot 'axLogFile.txt' with impulses lw 1
+plot 'compoundVectorFilteredLogFile.txt' using 1 with linespoints

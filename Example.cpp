@@ -8,6 +8,8 @@
 #include <deque>
 #include <numeric>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "MPU6050.h"
 
 // ---------------------------------------------------------------------------------------------
@@ -16,10 +18,14 @@
 MPU6050 device(0x68, false);
 
 const int windowSize{ 5 };
-std::deque<float> axBuffer;
 
-const double sampleRateHz{ 250 };                  // Sample rate in Hz
-const double loopDurationMs{ 1000 / sampleRateHz}; // Duration of each loop iteration in milliseconds
+const int sampleRateHz{ 5 };                  // Sample rate in Hz
+const int loopDurationMs{ 1000 / sampleRateHz }; // Duration of each loop iteration in milliseconds
+
+const float gravity_mps2{ 9.80665 };
+const float tau{ 0.98 };
+const float radiansToDegrees{ 57.2957795 };
+
 
 int time2Delay{ 0 };
 float dt{ 0 };
@@ -86,9 +92,11 @@ std::string getCurrentTimestamp() {
     return ss.str();
 }
 
+
 bool createDirectory(const std::string& path) {
     return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 }
+
 
 void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
     if (logfile.is_open()) {
@@ -154,6 +162,7 @@ float findMin(float a, float b, float c) {
 
 void logNormalizedAccelData(std::ofstream &logfile, float ax, float ay, float az) {
     if (logfile.is_open()) {
+
         // Find the minimum value among all three axes
         float min_value = findMin(ax, ay, az);
 
@@ -235,20 +244,25 @@ double movingAverage(const std::vector<double>& data, int windowSize){
     return sum/windowSize;
 }
 
-float roll_angle(float ax, float ay, float az){
-    return atanf(ay/(std::sqrt(ax*ax + az*az)))*RAD_T_DEG;
+float getRollAngle(float ax, float ay, float az){
+    return atan2f(ay, (std::sqrt(ax*ax + az*az)))*radiansToDegrees;
 }
-float pitch_angle(float ax, float ay, float az){
-    return atanf(-ax/(std::sqrt(ay*ay + az*az)))*RAD_T_DEG;
+float getPitchAngle(float ax, float ay, float az){
+    return atan2f(-ax, (std::sqrt(ay*ay + az*az)))*radiansToDegrees;
 }
+
+// -----
+
+
+// -----
 
 
 /*
 void compFilter(float dt, float tau, float ax, float ay, float az, float gr, float gp, float gy) {
 
   // Complementary filter
-  float accelPitch = atan2(ay, az) * RAD_T_DEG;
-  float accelRoll  = atan2(ax, az) * RAD_T_DEG;
+  float accelPitch = atan2(ay, az) * radiansToDegrees;
+  float accelRoll  = atan2(ax, az) * radiansToDegrees;
 
   attitude.roll = (tau)*(attitude.roll - imu_cal.gy*dt) + (1-tau)*(accelRoll);
   attitude.pitch = (tau)*(attitude.pitch + imu_cal.gx*dt) + (1-tau)*(accelPitch);
@@ -256,21 +270,86 @@ void compFilter(float dt, float tau, float ax, float ay, float az, float gr, flo
 }
 */
 
+// ***** spherical:
+
+template <typename T> int sgn(T val){
+    return (T(0) < val) - (val < T(0));
+}
+
+float inclination(float z, float r){
+    return acosf(z/r);
+}
+
+float azimuth(float x, float y){
+    return sgn(y)*acosf(x/std::sqrt(x*x + y*y));
+}
+
+void rotate(float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
+    *ax_rotated = ax*cosf(pitchAngle) - az*sinf(pitchAngle);
+    *ay_rotated = ay;
+    *az_rotated = ax*sinf(pitchAngle) + az*cosf(pitchAngle);
+}
+
+void rotateAll(float pitchAngle, float rollAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
+    *ax_rotated = ax*cosf(pitchAngle) - az*sinf(pitchAngle);
+    *ay_rotated = ax*sinf(pitchAngle)*sinf(rollAngle) + ay*cosf(rollAngle) + az*sinf(rollAngle)*cosf(pitchAngle);
+    *az_rotated = ax*sinf(pitchAngle)*cosf(rollAngle) - ay*sinf(rollAngle) + az*cosf(rollAngle)*cosf(pitchAngle);
+}
+
+
+// Time stabilization function
+float timeSync(auto t1){
+	// Find duration to sleep thread
+	auto t2 = std::chrono::high_resolution_clock::now();
+	time2Delay = std::chrono::duration<float, std::micro>(t2-t1).count();
+
+	// Sleep thread
+	std::this_thread::sleep_for(std::chrono::microseconds(loopDurationMs-time2Delay));
+
+	// Calculate dt
+	auto t3 = std::chrono::high_resolution_clock::now();
+	dt = (std::chrono::duration<float, std::micro>(t3-t1).count()) * 1E-6;
+	// std::cout << "\t" << 1/dt << std::endl;
+
+	// Return dt and begin main loop again
+	return dt;
+}
+
+// BURADASIN!!! Kontrol et.
+
+void compFilter(float dt, float tau, float* pitchAngle, float* rollAngle, float ax, float ay, float az, float gr, float gp, float gy) {
+
+  // Complementary filter
+  float accelPitchAngle = atan2(ay, az) * radiansToDegrees;
+  float accelRollAngle  = atan2(ax, az) * radiansToDegrees;
+
+  *rollAngle = (tau)*(*rollAngle - gp*dt) + (1-tau)*(accelRollAngle);
+  *pitchAngle = (tau)*(*pitchAngle + gr*dt) + (1-tau)*(accelPitchAngle);
+}
+
+
 int main() {    
 
+    
     if(!toggleFlag()){
         std::cout << "Logging has already occured. Exiting. (Flag == 0)" << std::endl;
         return 0;
     }
+    
+    
 
 
     float ax, ay, az, gr, gp, gy; //Variables to store the accel, gyro and angle values
-    sleep(1); //Wait for the MPU6050 to stabilize
+    float ax_rotated, ay_rotated, az_rotated; // Variables to store the rotated acceleration
+
+    // !!!
+    sleep(1); //Wait for the system clock to get ready
 
 
     auto timestamp = getCurrentTimestamp();
     auto directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
     
+    /*
     if (!createDirectory(directoryPath)) {
         std::cerr << "Error: Unable to create directory." << std::endl;
         return -1;
@@ -297,9 +376,13 @@ int main() {
     std::ofstream ayFilteredLogFile(directoryPath +  "ayFilteredLogFile.txt");
     std::ofstream azFilteredLogFile(directoryPath +  "azFilteredLogFile.txt");
 
+    std::ofstream compoundVectorFilteredLogFile(directoryPath +  "compoundVectorFilteredLogFile.txt");
+    
+    */
+
     // std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
 
-    writePlotScript(directoryPath);
+    // writePlotScript(directoryPath);
 
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() || !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() || !azLogFile.is_open() || !anglesLogFile.is_open()) {
@@ -316,6 +399,16 @@ int main() {
     MovingAverage<float> axMovingAvg(windowSize);
     MovingAverage<float> ayMovingAvg(windowSize);
     MovingAverage<float> azMovingAvg(windowSize);
+    
+    MovingAverage<float> compoundAccelMovingAvg(windowSize);
+
+    float thetaHat_rad{ 0 };
+    float phiHat_rad{ 0 };
+
+    float pitchAngleComp{ 0.0f };
+    float rollAngleComp{ 0.0f };
+
+    
 
     // Instead of true, use buttons for start/stop
     while(true){
@@ -324,11 +417,73 @@ int main() {
 
         //Get the current accelerometer values
         device.getAccel(&ax, &ay, &az);
+
         //Get the current gyroscope values
         device.getGyro(&gr, &gp, &gy);
 
-        auto timestamp {getCurrentTimestamp()};
+        //Get the current roll and pitch angles
+        float pitchAngleFormula = getPitchAngle(ax, ay, az);
+        float rollAngleFormula = getRollAngle(ax, ay, az);
 
+        
+
+        //Get compound acceleration and gyro vector
+        float compoundAccelerationVector = compoundVector(ax, ay, az);
+        float compoundGyroVector = compoundVector(gr, gp, gy);
+        
+        compFilter(dt, tau, &pitchAngleComp, &rollAngleComp, ax, ay, az, gr, gp, gy);
+
+        // rotateAll(pitchAngle, rollAngle, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
+
+
+
+
+        // auto timestamp {getCurrentTimestamp()};
+
+
+
+        // -----------------------------------------------------------------------------------------------
+
+        /*
+        // Calculating roll (phi) and pitch (theta) angle estimates using filtered accelerometer readings
+        float phiHat_deg{ atanf(ay/az)*radiansToDegrees };
+        float thetaHat_deg{ asinf(ax/gravity_mps2)*radiansToDegrees };
+
+        float phiHat_acc_rad{ atanf(ay/az) };
+        float thetaHat_acc_rad{ asinf(ax/gravity_mps2) };
+
+
+        // Transforming body rates to Euler rates 
+        float phiDot_rps{ gr + tanf(thetaHat_rad) * (sinf(phiHat_rad)*gp + cosf(phiHat_rad)*gy) }; 
+        float thetaDot_rps{ cosf(phiHat_rad)*gp - sinf(phiHat_rad)*gy };
+
+        // Integrate Euler rates to get estimate of roll and pitch angles
+        // phiHat_rad = phiHat_rad + (loopDurationMs/1000.f)*phiDot_rps;
+        // thetaHat_rad = thetaHat_rad + (loopDurationMs/1000.f)*thetaDot_rps;
+
+        // Combine accelerometer estimates with integral of gyro readings
+
+        phiHat_rad =         complementaryFilterAlpha  * phiHat_acc_rad
+                   + (1.0f - complementaryFilterAlpha) * (phiHat_rad + (loopDurationMs/1000.f)*phiDot_rps);
+
+        thetaHat_rad =       complementaryFilterAlpha  * thetaHat_acc_rad
+                   + (1.0f - complementaryFilterAlpha) * (thetaHat_rad + (loopDurationMs/1000.f)*thetaDot_rps);
+
+
+        std::cout << std::fixed << std::setprecision(3);
+        std::cout << "phiHat: " << phiHat_rad*radiansToDegrees << " thetaHat: " << thetaHat_rad*radiansToDegrees << std::endl;        
+        */
+        
+
+
+
+        
+
+        // -----------------------------------------------------------------------------------------------
+
+
+        /*
+        
         // Most of the algorithmic changes will be made here:
         if(compoundVector(ax, ay, az) >= 3.0f && compoundVector(gr, gp, gy) >= 12.0f){
             bumpCounter++;
@@ -337,12 +492,16 @@ int main() {
             // logData(bumpCountLogFile, bumpCounter);
         }
         
-
         //std::cout << "Time: " << timestamp << " Accel: " << ax << ", Y: " << ay << ", Z: " << az << " Bump Counter: " << bumpCounter << "\n"; 
 
-        std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
+        */
 
-        // float phiDot_rps = gr + tanf()
+        
+        
+
+
+        // std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
+
         /*
         std::cout 
             << "AccX (m/s^2): "         << std::setw(8) << ax
@@ -356,13 +515,18 @@ int main() {
         // -------------------------------------------------------------------------------------------------------------------------
 
         /*
+        std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
+
         std::cout 
             << "AccX (m/s^2): "         << std::setw(8) << ax
             << " AccY (m/s^2): "        << std::setw(8) << ay 
             << " AccZ (m/s^2): "        << std::setw(8) << az
-            << " Roll Angle (deg): "    << std::setw(8) << roll_angle(ax, ay, az)
-            << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az) << std::endl;
+            << " Roll Angle (deg): "    << std::setw(8) << rollAngle
+            << " Pitch Angle (deg): "   << std::setw(8) << pitchAngle << std::endl;
         */
+        
+        
+        
 
         // -------------------------------------------------------------------------------------------------------------------------
 
@@ -375,8 +539,50 @@ int main() {
             << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
         */
 
+        //std::cout << "phiHat_deg: " << std::setw(8) << phiHat_deg(ay, az) << "thetaHat_deg: " << std::setw(8) << thetaHat_deg(ax) << std::endl;
         // -------------------------------------------------------------------------------------------------------------------------
+        
+        /*
+        std::cout 
+            << "radius (r): " << std::setw(8) << compoundVector(ax, ay, az) 
+            << " inclination: " << std::setw(8) << inclination(az, compoundVector(ax, ay, az))*radiansToDegrees 
+            << " azimuth: " << std::setw(8) << azimuth(ax, ay)*radiansToDegrees << std::endl;
 
+        */
+
+        //rotate(pitchAngle, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
+
+        const int width = 5;
+        
+        /*
+        std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
+        std::cout 
+            << "AccX (m/s^2): "         << std::setw(width) << ax << " | "
+            << " AccY (m/s^2): "        << std::setw(width) << ay << " | "
+            << " AccZ (m/s^2): "        << std::setw(width) << az << " | "
+            << " AccX (rotated) (m/s^2): "         << std::setw(width) << ax_rotated << " | "
+            << " AccY (rotated) (m/s^2): "        << std::setw(width) << ay_rotated << " | "
+            << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
+            << " Pitch Angle (deg): "   << std::setw(width) << pitchAngleComp << " | "
+            << " Roll Angle (deg): " << std::setw(width) << rollAngleComp << std::endl;
+        
+        */
+
+        std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
+        std::cout 
+            << "AccX (m/s^2): "         << std::setw(width) << ax << " | "
+            << " AccY (m/s^2): "        << std::setw(width) << ay << " | "
+            << " AccZ (m/s^2): "        << std::setw(width) << az << " | "
+            << " Pitch Angle Formula: " << std::setw(width) << pitchAngleFormula << " | "
+            << " Pitch Angle Comp: "   << std::setw(width) << pitchAngleComp << " | "
+            << " Roll Angle Formula: " << std::setw(width) << rollAngleFormula << " | "
+            << " Roll Angle Comp: " << std::setw(width) << rollAngleComp << std::endl;
+        
+        
+
+        
+
+        /*
         std::vector<std::ofstream*> logFiles = {&axLogFile, &ayLogFile, &azLogFile, &grLogFile, &gpLogFile, &gyLogFile};
         std::vector<float> data = {ax, ay, az, gr, gp, gy}; 
 
@@ -384,17 +590,23 @@ int main() {
             logSingleSensorData(*logFiles[i], data[i]);
         }
 
-        logAngles(anglesLogFile, roll_angle(ax, ay, az), pitch_angle(ax, ay, az));
+        logAngles(anglesLogFile, rollAngle, pitchAngle);
         
         logAllSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
-        logCompoundData(compoundVectorLogFile, compoundVector(ax, ay, az), compoundVector(gr, gp, gy));
+        logCompoundData(compoundVectorLogFile, compoundAccelerationVector, compoundGyroVector);
 
         axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
         ayMovingAvg.updateAndLogMovingAverage(ayFilteredLogFile, ay);
         azMovingAvg.updateAndLogMovingAverage(azFilteredLogFile, az);
-
         
+        compoundAccelMovingAvg.updateAndLogMovingAverage(compoundVectorFilteredLogFile, compoundAccelerationVector);
+        
+        */
+
+
+        /*
+
         auto endTime{std::chrono::high_resolution_clock::now()};
         auto duration{std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count()};
 
@@ -403,6 +615,12 @@ int main() {
         if (delayMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
         }
+        
+        */
+        
+        
+
+       dt = timeSync(startTime);
         
     }
         
