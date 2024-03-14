@@ -1,33 +1,32 @@
-CC=g++
+# Define the C++ compiler to use
+CXX ?= g++
 
-DEPS=MPU6050.h
-CFLAGS=-fPIC -Wall -std=c++17 
+# Define any compile-time flags
+CXXFLAGS = -std=c++20
 
-LIBS=-li2c
-LFLAGS=-shared
+# Define the linker flags
+LDFLAGS = -li2c
 
-OBJ=MPU6050.o
-OLIB=libMPU6050.so
+# Define the target executable
+TARGET = Example
 
-%.o: %.cpp $(DEPS)
-	$(CC) -c $< -o $@ $(CFLAGS)
+# Define the source files
+SRCS = Example.cpp MPU6050.cpp logging.cpp
 
-all: $(OBJ)
-	$(CC) -o $(OLIB) $< $(LIBS) $(LFLAGS)
+# Define the object files
+OBJS = $(SRCS:.cpp=.o)
 
-install: all $(OLIB) $(DEPS)
-	install -m 755 -p $(OLIB) /usr/lib/
-	install -m 644 -p $(DEPS) /usr/include/
+# Default rule
+all: $(TARGET)
 
-uninstall:
-	rm -f /usr/include/MPU6050.h
-	rm -f /usr/lib/libMPU6050.so
+# Link the object files into the executable
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
+# Compile the source files into object files
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Clean up the project directory
 clean:
-	rm -f Example
-	rm -f Example.o
-	rm -f MPU6050.o
-	rm -f libMPU6050.so
-
-example: Example.o
-	$(CC) $< -o Example -lMPU6050 -pthread
+	$(RM) $(TARGET) $(OBJS)

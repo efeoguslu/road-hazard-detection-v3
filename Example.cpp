@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "logging.h"
 #include "MPU6050.h"
 
 // ---------------------------------------------------------------------------------------------
@@ -35,29 +37,31 @@ float dt{ 0 };
 
 template<typename T>
 class MovingAverage {
-private:
-    std::deque<T> buffer;
-    size_t windowSize;
-public:
-    MovingAverage(size_t size) : windowSize(size) {}
 
-    void updateAndLogMovingAverage(std::ofstream &logFile, T newValue) {
-        // Add the new value to the buffer
-        buffer.push_back(newValue);
+    private:
+        std::deque<T> buffer;
+        size_t windowSize;
+    
+    public:
+        MovingAverage(size_t size) : windowSize(size) {}
 
-        // If the buffer size exceeds the window size, remove the oldest value
-        if (buffer.size() > windowSize) {
-            buffer.pop_front();
+        void updateAndLogMovingAverage(std::ofstream &logFile, T newValue) {
+            // Add the new value to the buffer
+            buffer.push_back(newValue);
+
+            // If the buffer size exceeds the window size, remove the oldest value
+            if (buffer.size() > windowSize) {
+                buffer.pop_front();
+            }
+
+            // Calculate the moving average based on the current buffer contents
+            double sum = std::accumulate(buffer.begin(), buffer.end(), 0.0);
+            double movingAvg = sum / buffer.size();
+
+            // Write the moving average to the output file
+            logFile << movingAvg << "\n";
+            logFile.flush(); // Flush the output buffer to ensure data is written immediately
         }
-
-        // Calculate the moving average based on the current buffer contents
-        double sum = std::accumulate(buffer.begin(), buffer.end(), 0.0);
-        double movingAvg = sum / buffer.size();
-
-        // Write the moving average to the output file
-        logFile << movingAvg << "\n";
-        logFile.flush(); // Flush the output buffer to ensure data is written immediately
-    }
 };
 
 
@@ -92,77 +96,8 @@ std::string getCurrentTimestamp() {
     return ss.str();
 }
 
-
 bool createDirectory(const std::string& path) {
     return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
-}
-
-
-void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
-    if (logfile.is_open()) {
-        // Get current timestamp
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-
-        // Write timestamp and sensor data
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << ax << ", " << ay << ", " << az << ", ";
-        logfile << gr << ", " << gp << ", " << gy << std::endl;
-        
-    }
-}
-
-
-void logSingleSensorData(std::ofstream &logfile, float data) {
-    if (logfile.is_open()) {
-        /*
-        // Get current timestamp
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-
-        // Write timestamp and sensor data
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        */
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << data << std::endl;
-        
-    }
-}
-
-void logCompoundData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector) {
-    if (logfile.is_open()) {
-        // Get current timestamp
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-
-        // Write timestamp and sensor data
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << compoundAccelVector << "," << compoundGyroVector << std::endl;
-    }
-}
-
-void logBumpCount(std::ofstream &logfile, int count){
-    if(logfile.is_open()){
-        // Get current timestamp
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-
-        // Write timestamp and sensor data
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << count  << std::endl;
-    }
-}
-
-
-void logAngles(std::ofstream &logfile, float roll, float pitch) {
-    if (logfile.is_open()) {
-        // Write the normalized values to the file
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << roll << ", " << pitch << std::endl;
-    }
 }
 
 float compoundVector(float x, float y, float z){
@@ -282,10 +217,12 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 
 int main() {     
     
-    if(!toggleFlag()){
+    /*
+        if(!toggleFlag()){
         std::cout << "Logging has already occured. Exiting. (Flag == 0)" << std::endl;
         return 0;
     }
+    */
 
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
@@ -297,7 +234,7 @@ int main() {
     auto timestamp = getCurrentTimestamp();
     auto directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
     
-    /*
+    
     if (!createDirectory(directoryPath)) {
         std::cerr << "Error: Unable to create directory." << std::endl;
         return -1;
@@ -325,8 +262,11 @@ int main() {
     std::ofstream azFilteredLogFile(directoryPath +  "azFilteredLogFile.txt");
 
     std::ofstream compoundVectorFilteredLogFile(directoryPath +  "compoundVectorFilteredLogFile.txt");
+
+    std::ofstream rotatedAzLogFile(directoryPath +  "rotatedAzLogFile.txt");
+    std::ofstream rotatedAzFilteredLogFile(directoryPath +  "rotatedAzFilteredLogFile.txt");
     
-    */
+    
 
     // std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
 
@@ -347,6 +287,8 @@ int main() {
     MovingAverage<float> azMovingAvg(windowSize);
     
     MovingAverage<float> compoundAccelMovingAvg(windowSize);
+
+    MovingAverage<float> rotatedAzMovingAvg(windowSize);
 
     float pitchAngleComp{ 0.0f };
     float rollAngleComp{ 0.0f };    
@@ -383,23 +325,10 @@ int main() {
 
         // -----------------------------------------------------------------------------------------------
 
-
-        /*
-        
-        // Most of the algorithmic changes will be made here:
-        if(compoundVector(ax, ay, az) >= 3.0f && compoundVector(gr, gp, gy) >= 12.0f){
-            bumpCounter++;
-            std::cout << "Bump Count: " << bumpCounter << "\n";
-            logBumpCount(bumpCountLogFile, bumpCounter);
-            // logData(bumpCountLogFile, bumpCounter);
-        }
+        // Printing to Terminal:
         
         //std::cout << "Time: " << timestamp << " Accel: " << ax << ", Y: " << ay << ", Z: " << az << " Bump Counter: " << bumpCounter << "\n"; 
 
-        */
-
-        
-        
 
 
         /*
@@ -453,7 +382,8 @@ int main() {
         */
 
 
-
+        /*
+        
         constexpr int width = 5;
 
         std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
@@ -466,9 +396,10 @@ int main() {
             << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
             << " Roll Angle (deg): "               << std::setw(width) << rollAngleComp << " | "
             << " Pitch Angle (deg): "              << std::setw(width) << pitchAngleComp << std::endl;
+
+        */
         
         
-         
         /*
 
         std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
@@ -488,19 +419,27 @@ int main() {
         
         // Logging:
         
+        // Most of the algorithmic changes will be made here:
+        if(az_rotated >= 3.0f){
+            bumpCounter++;
+            std::cout << "Bump Count: " << bumpCounter << "\n";
+            logBumpCount(bumpCountLogFile, bumpCounter);
+            // logData(bumpCountLogFile, bumpCounter);
+        }
 
-        /*
+        
         std::vector<std::ofstream*> logFiles = {&axLogFile, &ayLogFile, &azLogFile, &grLogFile, &gpLogFile, &gyLogFile};
         std::vector<float> data = {ax, ay, az, gr, gp, gy}; 
 
         for (size_t i = 0; i < logFiles.size(); ++i) {
             logSingleSensorData(*logFiles[i], data[i]);
         }
-
-        logAngles(anglesLogFile, rollAngle, pitchAngle);
         
-        logAllSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
+        logSingleSensorData(rotatedAzLogFile, az_rotated);
 
+
+        logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
+        logAllSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
         logCompoundData(compoundVectorLogFile, compoundAccelerationVector, compoundGyroVector);
 
         axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
@@ -509,7 +448,7 @@ int main() {
         
         compoundAccelMovingAvg.updateAndLogMovingAverage(compoundVectorFilteredLogFile, compoundAccelerationVector);
         
-        */
+        rotatedAzMovingAvg.updateAndLogMovingAverage(rotatedAzFilteredLogFile, az_rotated);        
        
        
 
