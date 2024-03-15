@@ -26,9 +26,15 @@ extern "C" {
 #include <unistd.h>
 
 
-void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy);
-void logSingleSensorData(std::ofstream &logfile, float data);
-void logCompoundData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector);
+// void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy);
+// void logSingleSensorData(std::ofstream &logfile, float data);
+// void logCompoundData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector);
+// void logBumpCount(std::ofstream &logfile, int count);
+// void logAngles(std::ofstream &logfile, float roll, float pitch);
+
+void logData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy);
+void logData(std::ofstream &logfile, float data);
+void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector);
 void logBumpCount(std::ofstream &logfile, int count);
 void logAngles(std::ofstream &logfile, float roll, float pitch);
 

@@ -1,7 +1,7 @@
 #include "logging.h"
 
 
-void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
+void logData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
     if (logfile.is_open()) {
         // Get current timestamp
         auto now = std::chrono::system_clock::now();
@@ -17,7 +17,7 @@ void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, floa
 }
 
 
-void logSingleSensorData(std::ofstream &logfile, float data) {
+void logData(std::ofstream &logfile, float data) {
     if (logfile.is_open()) {
         /*
         // Get current timestamp
@@ -33,7 +33,7 @@ void logSingleSensorData(std::ofstream &logfile, float data) {
     }
 }
 
-void logCompoundData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector) {
+void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector) {
     if (logfile.is_open()) {
         // Get current timestamp
         auto now = std::chrono::system_clock::now();

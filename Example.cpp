@@ -10,12 +10,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <algorithm>
+#include <stack>
 
 #include "logging.h"
 #include "MPU6050.h"
-
-// ---------------------------------------------------------------------------------------------
-
 
 MPU6050 device(0x68, false);
 
@@ -32,6 +31,134 @@ const float degreesToRadians{ 0.0174532925 };
 
 int time2Delay{ 0 };
 float dt{ 0 };
+
+// ----------------------------------------------------------------------------------------------
+
+struct Bump {
+    int start;
+    int end;
+    std::chrono::system_clock::time_point timestamp;
+};
+
+// ----------------------------------------------------------------------------------------------
+
+
+class CircularBuffer {
+public:
+    CircularBuffer(int size)
+        : data_(size, 0.0f)
+        , next_(0)
+        , head_(-1)
+    {
+    }
+
+    bool empty() {
+        return size() == 0;
+    }
+
+    int size() const {
+        if (head_ >= 0) {
+            if (next_ > head_)
+                return next_ - head_;
+            else
+                return next_ + (data_.size() - head_);
+        }
+        return 0;
+    }
+
+    void push(float val) {
+        if (size() == data_.size()) {
+            std::cout << "Buffer is full, can't push anything" << std::endl;
+            return;
+        }
+        data_[next_++] = val;
+        if (head_ < 0)
+            head_ = 0;
+        if (next_ == data_.size())
+            next_ = 0;
+    }
+
+    float pop() {
+        if (head_ < 0) {
+            std::cout << "Empty Buffer, nothing to pop" << std::endl;
+            return -1.0f;
+        }
+
+        float popVal = data_[head_];
+        data_[head_++] = 0.0f; // Clean the popped memory
+
+        if (head_ == data_.size())
+            head_ = 0;
+
+        if (head_ == next_) {
+            head_ = -1; // Buffer is empty now
+            next_ = 0;
+        }
+
+        return popVal;
+    }
+
+private:
+    std::vector<float> data_;
+    int next_;
+    int head_;
+};
+
+
+// ----------------------------------------------------------------------------------------------
+
+
+
+std::vector<Bump> detectBumps(CircularBuffer& buffer, int windowSize, int moveThreshold, int rangeThreshold, int bumpThreshold) {
+    std::vector<Bump> bumps;
+    std::stack<Bump> bumpStack;
+    int n = buffer.size();
+    int start = 0, end = windowSize - 1;
+    float prevRange = 0, rangeBeforeBegin = 0;
+    bool bumpStarted = false;
+
+    // Convert the buffer data to a vector for analysis
+    std::vector<float> signal;
+    for (int i = 0; i < n; ++i) {
+        signal.push_back(buffer.pop());
+    }
+
+    while (end < n) {
+        // Calculate the range of the current window
+        int minVal = *std::min_element(signal.begin() + start, signal.begin() + end + 1);
+        int maxVal = *std::max_element(signal.begin() + start, signal.begin() + end + 1);
+        int currentRange = maxVal - minVal;
+
+        // Detect bumps based on the range change
+        if (currentRange - prevRange > rangeThreshold) {
+            if (!bumpStarted) {
+                bumpStack.push({start, -1}); // Start of a bump
+                bumpStarted = true;
+            }
+        } else if (prevRange - currentRange > rangeThreshold) {
+            if (bumpStarted) {
+                bumpStack.top().end = end; // End of a bump
+                bumpStarted = false;
+            }
+        }
+
+        prevRange = currentRange;
+        start += moveThreshold;
+        end += moveThreshold;
+    }
+
+    // Process the bump stack to filter out bumps based on length
+    while (!bumpStack.empty()) {
+        Bump bump = bumpStack.top();
+        bumpStack.pop();
+        int length = bump.end - bump.start;
+        if (length >= bumpThreshold) {
+            bumps.push_back(bump);
+        }
+    }
+
+    return bumps;
+}
 
 // ----------------------------------------------------------------------------------------------
 
@@ -218,12 +345,14 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 int main() {     
     
     /*
-        if(!toggleFlag()){
+    if(!toggleFlag()){
         std::cout << "Logging has already occured. Exiting. (Flag == 0)" << std::endl;
         return 0;
     }
     */
-
+    
+    
+    
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
     float ax_rotated, ay_rotated, az_rotated; // Variables to store the rotated acceleration
@@ -268,14 +397,17 @@ int main() {
     
     
 
-    // std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
+    std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
 
     /*
-    if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() || !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() || !azLogFile.is_open() || !anglesLogFile.is_open()) {
+    if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
+     !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() ||\
+     !azLogFile.is_open() || !anglesLogFile.is_open()) {
         std::cerr << "Error: Unable to open log files." << std::endl;
         return -1;
     }
     */
+
 
     //Read the current yaw angle
     device.calc_yaw = false;
@@ -291,7 +423,17 @@ int main() {
     MovingAverage<float> rotatedAzMovingAvg(windowSize);
 
     float pitchAngleComp{ 0.0f };
-    float rollAngleComp{ 0.0f };    
+    float rollAngleComp{ 0.0f };
+
+    int totalBumps{ 0 };
+
+    int moveThreshold{ 1 }; // Adjust based on the speed of bumps
+    float rangeThreshold{ 100.0f }; // Adjust based on the sensitivity needed
+    int bumpThreshold{ 10 }; // Adjust based on the minimum duration of bumps
+
+
+    // Declare the circular buffer with a size that matches your window size
+    CircularBuffer buffer(windowSize);
 
     while(true){
         // Record loop time stamp
@@ -318,11 +460,31 @@ int main() {
         rotateAll(rollAngleComp*degreesToRadians, pitchAngleComp*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
 
 
+        
+
+        // Push the current az_rotated value into the buffer
+        buffer.push(az_rotated);
+
+        if (buffer.size() == windowSize) {
+            std::vector<float> signal;
+            for (int i = 0; i < windowSize; ++i) {
+                signal.push_back(buffer.pop());
+            }
+
+            std::vector<Bump> bumps = detectBumps(buffer, windowSize, moveThreshold, rangeThreshold, bumpThreshold);
+
+            // Log each detected bump
+            for (const Bump& bump : bumps) {
+                std::cout << "Bump detected at: " << std::chrono::system_clock::to_time_t(bump.timestamp) << std::endl;
+                totalBumps++;
+            }
+
+            std::cout << "Total bumps detected so far: " << totalBumps << std::endl;
+        }
+        
+
 
         // auto timestamp {getCurrentTimestamp()};
-
-
-
         // -----------------------------------------------------------------------------------------------
 
         // Printing to Terminal:
@@ -420,27 +582,33 @@ int main() {
         // Logging:
         
         // Most of the algorithmic changes will be made here:
+
+        /*
         if(az_rotated >= 3.0f){
             bumpCounter++;
             std::cout << "Bump Count: " << bumpCounter << "\n";
             logBumpCount(bumpCountLogFile, bumpCounter);
-            // logData(bumpCountLogFile, bumpCounter);
+            logData(bumpCountLogFile, bumpCounter);
         }
+        
+        */
+        
 
         
         std::vector<std::ofstream*> logFiles = {&axLogFile, &ayLogFile, &azLogFile, &grLogFile, &gpLogFile, &gyLogFile};
         std::vector<float> data = {ax, ay, az, gr, gp, gy}; 
 
         for (size_t i = 0; i < logFiles.size(); ++i) {
-            logSingleSensorData(*logFiles[i], data[i]);
+            logData(*logFiles[i], data[i]);
         }
         
-        logSingleSensorData(rotatedAzLogFile, az_rotated);
+        logData(rotatedAzLogFile, az_rotated);
 
 
         logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
-        logAllSensorData(sensorLogFile, ax, ay, az, gr, gp, gy);
-        logCompoundData(compoundVectorLogFile, compoundAccelerationVector, compoundGyroVector);
+
+        logData(sensorLogFile, ax, ay, az, gr, gp, gy);
+        logData(compoundVectorLogFile, compoundAccelerationVector, compoundGyroVector);
 
         axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
         ayMovingAvg.updateAndLogMovingAverage(ayFilteredLogFile, ay);
