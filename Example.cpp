@@ -15,12 +15,13 @@
 
 #include "logging.h"
 #include "MPU6050.h"
+#include "filters.h"
 
 MPU6050 device(0x68, false);
 
 const int windowSize{ 5 };
 
-const int sampleRateHz{ 100 };                  // Sample rate in Hz
+const int sampleRateHz{ 75 };                  // Sample rate in Hz
 const int loopDurationMs{ 1000 / sampleRateHz }; // Duration of each loop iteration in milliseconds
 
 const float gravity_mps2{ 9.80665 };
@@ -32,7 +33,11 @@ const float degreesToRadians{ 0.0174532925 };
 int time2Delay{ 0 };
 float dt{ 0 };
 
+float filterAlpha{ 0.5f };
+
 // ----------------------------------------------------------------------------------------------
+
+FirstOrderIIR filt;
 
 struct Bump {
     int start;
@@ -342,7 +347,24 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 
 }
 
+
+void logBumpsToFile(std::ofstream &logfile, int bumpCount) {
+    // Get current timestamp
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+
+        // Write timestamp and sensor data
+        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
+        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
+        logfile << bumpCount << std::endl;
+}
+
+
+
+
+
 int main() {     
+
     
     /*
     if(!toggleFlag()){
@@ -351,7 +373,7 @@ int main() {
     }
     */
     
-    
+    FirstOrderIIR_Init(&filt, filterAlpha);
     
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
@@ -398,6 +420,9 @@ int main() {
     
 
     std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
+    std::ofstream bumpCount(directoryPath + "bumpCount.txt");
+
+    std::ofstream iirFilter(directoryPath + "iirFilter.txt");
 
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
@@ -431,6 +456,8 @@ int main() {
     float rangeThreshold{ 100.0f }; // Adjust based on the sensitivity needed
     int bumpThreshold{ 10 }; // Adjust based on the minimum duration of bumps
 
+    float iirFilterOutput{ 0 };
+
 
     // Declare the circular buffer with a size that matches your window size
     CircularBuffer buffer(windowSize);
@@ -459,9 +486,19 @@ int main() {
         // Rotation:
         rotateAll(rollAngleComp*degreesToRadians, pitchAngleComp*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
 
+        // First Order IIR Implementation:
+        iirFilterOutput = FirstOrderIIR_Update(&filt, az_rotated);
 
-        
 
+        constexpr int width = 5;
+
+        std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
+        std::cout 
+            << " AccZ (m/s^2): "                   << std::setw(width) << az << " | "
+            << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
+            << " Filter Output: "               << std::setw(width) << iirFilterOutput << std::endl;
+
+        /*
         // Push the current az_rotated value into the buffer
         buffer.push(az_rotated);
 
@@ -477,10 +514,16 @@ int main() {
             for (const Bump& bump : bumps) {
                 std::cout << "Bump detected at: " << std::chrono::system_clock::to_time_t(bump.timestamp) << std::endl;
                 totalBumps++;
+
+                logBumpsToFile(bumpCount, totalBumps);
             }
 
             std::cout << "Total bumps detected so far: " << totalBumps << std::endl;
         }
+        
+        */
+
+        
         
 
 
@@ -535,15 +578,6 @@ int main() {
 
         // -------------------------------------------------------------------------------------------------------------------------
         
-        /*
-        std::cout 
-            << "radius (r): " << std::setw(8) << compoundVector(ax, ay, az) 
-            << " inclination: " << std::setw(8) << inclination(az, compoundVector(ax, ay, az))*radiansToDegrees 
-            << " azimuth: " << std::setw(8) << azimuth(ax, ay)*radiansToDegrees << std::endl;
-
-        */
-
-
         /*
         
         constexpr int width = 5;
@@ -603,6 +637,8 @@ int main() {
         }
         
         logData(rotatedAzLogFile, az_rotated);
+
+        logData(iirFilter, iirFilterOutput);
 
 
         logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);

@@ -11,7 +11,7 @@ LDFLAGS = -li2c
 TARGET = Example
 
 # Define the source files
-SRCS = Example.cpp MPU6050.cpp logging.cpp
+SRCS = Example.cpp MPU6050.cpp logging.cpp filters.cpp
 
 # Define the object files
 OBJS = $(SRCS:.cpp=.o)
