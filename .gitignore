@@ -4,4 +4,5 @@ libMPU6050.so
 MPU6050.o
 logging.o
 filters.o
+queue.o
 logs/*

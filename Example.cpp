@@ -275,6 +275,7 @@ int main() {
 
     std::ofstream bumpCountNaiveLogFile(directoryPath + "bumpCountNaiveLogFile.txt");
     std::ofstream bumpCountNaiveSquaredLogFile(directoryPath + "bumpCountNaiveSquaredLogFile.txt");
+    std::ofstream bumpCountCircularBufferLogFile(directoryPath + "bumpCountCircularBufferLogFile.txt");
 
     std::ofstream axLogFile(directoryPath + "axLogFile.txt");
     std::ofstream ayLogFile(directoryPath + "ayLogFile.txt");
@@ -303,6 +304,10 @@ int main() {
 
     std::ofstream iirFilter(directoryPath + "iirFilter.txt");
 
+    std::ofstream meanLogFile(directoryPath + "meanLogFile.txt");
+    std::ofstream standartDeviationLogFile(directoryPath + "standartDeviationLogFile.txt");
+    std::ofstream varianceLogFile(directoryPath + "varianceLogFile.txt");
+
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
      !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() ||\
@@ -317,9 +322,11 @@ int main() {
     device.calc_yaw = false;
 
 
-    //Get bump counts for different cases
+    //Get bump counts for different cases (Other than buffer)
     int bumpCounterNaive{ 0 };
     int bumpCounterNaiveSquared{ 0 };
+
+    // TODO: add cases for mean, variance and std. dev.
 
     MovingAverage<float> axMovingAvg(windowSize);
     MovingAverage<float> ayMovingAvg(windowSize);
@@ -336,6 +343,14 @@ int main() {
 
     float iirFilterOutput{ 0 };
 
+
+    queue q1;
+    int bufferSize{ 30 };
+    init_queue(&q1, bufferSize);
+
+    float mean{ 0 };
+    float std_dev{ 0 };
+    float variance{ 0 };
 
     while(true){
         // Record loop time stamp
@@ -355,6 +370,22 @@ int main() {
 
         // First Order IIR Implementation:
         iirFilterOutput = FirstOrderIIR_Update(&filt, az_rotated);
+
+        enqueue(&q1, iirFilterOutput);
+
+        if(queue_full(&q1)){
+            mean = calculate_mean(&q1);
+            std_dev = calculate_std_dev(&q1, mean);
+            variance = calculate_variance(&q1, mean);
+
+
+            std::cout << "Bump Count: " << q1.bump_counter << std::endl;
+
+            logData(meanLogFile, mean);
+            logData(standartDeviationLogFile, std_dev);
+            logData(varianceLogFile, variance);
+
+        }
 
 
         /*
@@ -461,17 +492,21 @@ int main() {
         // Most of the algorithmic changes will be made here:
 
         
-        if(iirFilterOutput >= 1.2f){
+        if(iirFilterOutput >= 1.4f){
             bumpCounterNaive++;
             std::cout << "Bump Count for Naive Case: " << bumpCounterNaive << "\n";
             logData(bumpCountNaiveLogFile, bumpCounterNaive);
         }
 
-        if(iirFilterOutput*iirFilterOutput >= 1.6f){
+        if(iirFilterOutput*iirFilterOutput >= 1.8f){
             bumpCounterNaiveSquared++;
             std::cout << "Bump Count for Naive Squared Case: " << bumpCounterNaiveSquared << "\n";
             logData(bumpCountNaiveSquaredLogFile, bumpCounterNaiveSquared);
         }
+        
+        logData(bumpCountCircularBufferLogFile, q1.bump_counter);
+        
+        
 
 
         
