@@ -103,3 +103,27 @@ void logAngles(std::ofstream &logfile, float roll, float pitch) {
         logfile << roll << ", " << pitch << std::endl;
     }
 }
+
+
+void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile) {
+    if (!inputFile.is_open()) {
+        std::cerr << "Input file is not open." << std::endl;
+        return;
+    }
+
+    if (!outputFile.is_open()) {
+        std::cerr << "Output file is not open." << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(inputFile, line)) {
+        std::istringstream iss(line);
+        std::string timestamp;
+        double sensorData;
+
+        if (iss >> timestamp >> sensorData) {
+            outputFile << sensorData << std::endl;
+        }
+    }
+}

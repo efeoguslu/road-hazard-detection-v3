@@ -12,10 +12,12 @@
 #include <unistd.h>
 #include <algorithm>
 #include <stack>
+#include <mutex>
 
 #include "logging.h"
 #include "MPU6050.h"
 #include "filters.h"
+#include "queue.h"
 
 MPU6050 device(0x68, false);
 
@@ -39,131 +41,6 @@ float filterAlpha{ 0.5f };
 
 FirstOrderIIR filt;
 
-struct Bump {
-    int start;
-    int end;
-    std::chrono::system_clock::time_point timestamp;
-};
-
-// ----------------------------------------------------------------------------------------------
-
-
-class CircularBuffer {
-public:
-    CircularBuffer(int size)
-        : data_(size, 0.0f)
-        , next_(0)
-        , head_(-1)
-    {
-    }
-
-    bool empty() {
-        return size() == 0;
-    }
-
-    int size() const {
-        if (head_ >= 0) {
-            if (next_ > head_)
-                return next_ - head_;
-            else
-                return next_ + (data_.size() - head_);
-        }
-        return 0;
-    }
-
-    void push(float val) {
-        if (size() == data_.size()) {
-            std::cout << "Buffer is full, can't push anything" << std::endl;
-            return;
-        }
-        data_[next_++] = val;
-        if (head_ < 0)
-            head_ = 0;
-        if (next_ == data_.size())
-            next_ = 0;
-    }
-
-    float pop() {
-        if (head_ < 0) {
-            std::cout << "Empty Buffer, nothing to pop" << std::endl;
-            return -1.0f;
-        }
-
-        float popVal = data_[head_];
-        data_[head_++] = 0.0f; // Clean the popped memory
-
-        if (head_ == data_.size())
-            head_ = 0;
-
-        if (head_ == next_) {
-            head_ = -1; // Buffer is empty now
-            next_ = 0;
-        }
-
-        return popVal;
-    }
-
-private:
-    std::vector<float> data_;
-    int next_;
-    int head_;
-};
-
-
-// ----------------------------------------------------------------------------------------------
-
-
-
-std::vector<Bump> detectBumps(CircularBuffer& buffer, int windowSize, int moveThreshold, int rangeThreshold, int bumpThreshold) {
-    std::vector<Bump> bumps;
-    std::stack<Bump> bumpStack;
-    int n = buffer.size();
-    int start = 0, end = windowSize - 1;
-    float prevRange = 0, rangeBeforeBegin = 0;
-    bool bumpStarted = false;
-
-    // Convert the buffer data to a vector for analysis
-    std::vector<float> signal;
-    for (int i = 0; i < n; ++i) {
-        signal.push_back(buffer.pop());
-    }
-
-    while (end < n) {
-        // Calculate the range of the current window
-        int minVal = *std::min_element(signal.begin() + start, signal.begin() + end + 1);
-        int maxVal = *std::max_element(signal.begin() + start, signal.begin() + end + 1);
-        int currentRange = maxVal - minVal;
-
-        // Detect bumps based on the range change
-        if (currentRange - prevRange > rangeThreshold) {
-            if (!bumpStarted) {
-                bumpStack.push({start, -1}); // Start of a bump
-                bumpStarted = true;
-            }
-        } else if (prevRange - currentRange > rangeThreshold) {
-            if (bumpStarted) {
-                bumpStack.top().end = end; // End of a bump
-                bumpStarted = false;
-            }
-        }
-
-        prevRange = currentRange;
-        start += moveThreshold;
-        end += moveThreshold;
-    }
-
-    // Process the bump stack to filter out bumps based on length
-    while (!bumpStack.empty()) {
-        Bump bump = bumpStack.top();
-        bumpStack.pop();
-        int length = bump.end - bump.start;
-        if (length >= bumpThreshold) {
-            bumps.push_back(bump);
-        }
-    }
-
-    return bumps;
-}
 
 // ----------------------------------------------------------------------------------------------
 
@@ -364,7 +241,7 @@ void logBumpsToFile(std::ofstream &logfile, int bumpCount) {
 
 
 int main() {     
-
+    
     
     /*
     if(!toggleFlag()){
@@ -395,7 +272,9 @@ int main() {
 
     std::ofstream sensorLogFile(directoryPath + "sensorLogFile.txt");
     std::ofstream compoundVectorLogFile(directoryPath + "compoundVectorLogFile.txt");
-    std::ofstream bumpCountLogFile(directoryPath + "bumpCountLogFile.txt");
+
+    std::ofstream bumpCountNaiveLogFile(directoryPath + "bumpCountNaiveLogFile.txt");
+    std::ofstream bumpCountNaiveSquaredLogFile(directoryPath + "bumpCountNaiveSquaredLogFile.txt");
 
     std::ofstream axLogFile(directoryPath + "axLogFile.txt");
     std::ofstream ayLogFile(directoryPath + "ayLogFile.txt");
@@ -436,8 +315,11 @@ int main() {
 
     //Read the current yaw angle
     device.calc_yaw = false;
-    //Get bump count
-    auto bumpCounter{0};
+
+
+    //Get bump counts for different cases
+    int bumpCounterNaive{ 0 };
+    int bumpCounterNaiveSquared{ 0 };
 
     MovingAverage<float> axMovingAvg(windowSize);
     MovingAverage<float> ayMovingAvg(windowSize);
@@ -450,17 +332,10 @@ int main() {
     float pitchAngleComp{ 0.0f };
     float rollAngleComp{ 0.0f };
 
-    int totalBumps{ 0 };
 
-    int moveThreshold{ 1 }; // Adjust based on the speed of bumps
-    float rangeThreshold{ 100.0f }; // Adjust based on the sensitivity needed
-    int bumpThreshold{ 10 }; // Adjust based on the minimum duration of bumps
 
     float iirFilterOutput{ 0 };
 
-
-    // Declare the circular buffer with a size that matches your window size
-    CircularBuffer buffer(windowSize);
 
     while(true){
         // Record loop time stamp
@@ -472,16 +347,8 @@ int main() {
         //Get the current gyroscope values
         device.getGyro(&gr, &gp, &gy);
 
-        //Get the current roll and pitch angles using the formula
-        // float pitchAngleFormula = getPitchAngle(ax, ay, az);
-        // float rollAngleFormula = getRollAngle(ax, ay, az);
-
         //Get the current roll and pitch angles using complementary filter
         complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngleComp, &pitchAngleComp);
-
-        //Get compound acceleration and gyro vector
-        float compoundAccelerationVector = compoundVector(ax, ay, az);
-        float compoundGyroVector = compoundVector(gr, gp, gy);
 
         // Rotation:
         rotateAll(rollAngleComp*degreesToRadians, pitchAngleComp*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
@@ -490,6 +357,8 @@ int main() {
         iirFilterOutput = FirstOrderIIR_Update(&filt, az_rotated);
 
 
+        /*
+
         constexpr int width = 5;
 
         std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
@@ -497,33 +366,7 @@ int main() {
             << " AccZ (m/s^2): "                   << std::setw(width) << az << " | "
             << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
             << " Filter Output: "               << std::setw(width) << iirFilterOutput << std::endl;
-
-        /*
-        // Push the current az_rotated value into the buffer
-        buffer.push(az_rotated);
-
-        if (buffer.size() == windowSize) {
-            std::vector<float> signal;
-            for (int i = 0; i < windowSize; ++i) {
-                signal.push_back(buffer.pop());
-            }
-
-            std::vector<Bump> bumps = detectBumps(buffer, windowSize, moveThreshold, rangeThreshold, bumpThreshold);
-
-            // Log each detected bump
-            for (const Bump& bump : bumps) {
-                std::cout << "Bump detected at: " << std::chrono::system_clock::to_time_t(bump.timestamp) << std::endl;
-                totalBumps++;
-
-                logBumpsToFile(bumpCount, totalBumps);
-            }
-
-            std::cout << "Total bumps detected so far: " << totalBumps << std::endl;
-        }
-        
         */
-
-        
         
 
 
@@ -617,15 +460,22 @@ int main() {
         
         // Most of the algorithmic changes will be made here:
 
-        /*
-        if(az_rotated >= 3.0f){
-            bumpCounter++;
-            std::cout << "Bump Count: " << bumpCounter << "\n";
-            logBumpCount(bumpCountLogFile, bumpCounter);
-            logData(bumpCountLogFile, bumpCounter);
-        }
         
-        */
+        if(iirFilterOutput >= 1.2f){
+            bumpCounterNaive++;
+            std::cout << "Bump Count for Naive Case: " << bumpCounterNaive << "\n";
+            logData(bumpCountNaiveLogFile, bumpCounterNaive);
+        }
+
+        if(iirFilterOutput*iirFilterOutput >= 1.6f){
+            bumpCounterNaiveSquared++;
+            std::cout << "Bump Count for Naive Squared Case: " << bumpCounterNaiveSquared << "\n";
+            logData(bumpCountNaiveSquaredLogFile, bumpCounterNaiveSquared);
+        }
+
+
+        
+        
         
 
         
@@ -637,20 +487,17 @@ int main() {
         }
         
         logData(rotatedAzLogFile, az_rotated);
-
-        logData(iirFilter, iirFilterOutput);
-
+        logData(iirFilter, iirFilterOutput); // az_rotated is filtered with IIR 
 
         logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
 
         logData(sensorLogFile, ax, ay, az, gr, gp, gy);
-        logData(compoundVectorLogFile, compoundAccelerationVector, compoundGyroVector);
+
 
         axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
         ayMovingAvg.updateAndLogMovingAverage(ayFilteredLogFile, ay);
         azMovingAvg.updateAndLogMovingAverage(azFilteredLogFile, az);
         
-        compoundAccelMovingAvg.updateAndLogMovingAverage(compoundVectorFilteredLogFile, compoundAccelerationVector);
         
         rotatedAzMovingAvg.updateAndLogMovingAverage(rotatedAzFilteredLogFile, az_rotated);        
        

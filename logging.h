@@ -39,6 +39,9 @@ void logBumpCount(std::ofstream &logfile, int count);
 void logAngles(std::ofstream &logfile, float roll, float pitch);
 
 
+void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile);
+
+
 
 #endif // LOGGING_H
 
