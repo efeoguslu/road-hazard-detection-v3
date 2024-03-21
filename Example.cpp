@@ -110,7 +110,7 @@ bool createDirectory(const std::string& path) {
 }
 
 float compoundVector(float x, float y, float z){
-  return std::sqrt(x*x + y*y + z*z);
+    return std::sqrt(x*x + y*y + z*z);
 }
 
 double movingAverage(const std::vector<double>& data, int windowSize){

@@ -54,12 +54,17 @@ bool enqueue(queue* q, float value){
     float max_value = q->values[0];
     float min_value = q->values[0];
 
+    int where_is_max = 0;
+    int where_is_min = 0;
+
     for(int i = 0; i < q->num_entries; ++i){
         if (q->values[i] > max_value) {
             max_value = q->values[i];
+            where_is_max = i;
         }
         if (q->values[i] < min_value) {
             min_value = q->values[i];
+            where_is_min = i;
         }
     }
 
@@ -72,6 +77,10 @@ bool enqueue(queue* q, float value){
 
     if(range_difference > 0 && range_difference > range_threshold){
         q->bump_counter++;
+        // ... ??????
+    }
+    else if(range_difference <= 0 && std::abs(range_difference) > range_threshold){
+        // ... ??????
     }
 
     q->previous_range = new_range;
@@ -107,4 +116,36 @@ float calculate_variance(queue* q, float mean) {
     }
     float variance = sum_of_sq_diff / q->size;
     return variance;
+}
+
+
+
+// -------------------------------------------------------------------------------------
+
+bool push(stack *mystack, int value){
+
+    node *newnode = (node *)malloc(sizeof(node));
+    if(newnode == NULL) return false;
+
+
+    newnode->value = value;
+    newnode->next = *mystack;
+
+    *mystack = newnode;
+
+    return true;
+}
+
+
+int pop(stack *mystack){
+
+    if(*mystack == NULL) return STACK_EMPTY;
+
+    int result = (*mystack)->value;
+    node *tmp = *mystack;
+    *mystack = (*mystack)->next;
+
+    free(tmp);
+
+    return result;
 }

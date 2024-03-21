@@ -5,11 +5,14 @@
 #include <cstdlib>
 #include <climits>
 #include <cmath>
+#include <unistd.h>
 
 
 
-// detect when queue is empty:
-#define QUEUE_EMPTY INT_MIN
+// detect when queue/stack is empty:
+#define QUEUE_EMPTY (INT_MIN)
+#define STACK_EMPTY (INT_MIN)
+
 
 typedef struct{
     float *values;
@@ -18,6 +21,16 @@ typedef struct{
     float previous_range;
     int bump_counter;
 } queue;
+
+
+
+typedef struct node{
+    int value;
+    struct node *next;
+} node;
+
+
+typedef node * stack;
 
 
 
@@ -31,6 +44,11 @@ bool enqueue(queue* q, float value);
 float calculate_mean(queue* q);
 float calculate_std_dev(queue* q, float mean);
 float calculate_variance(queue* q, float mean);
+
+// --------------------------------------------------------------
+
+bool push(stack *mystack, int value);
+int pop(stack *mystack);
 
 
 #endif // QUEUE_H
