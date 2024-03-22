@@ -25,6 +25,8 @@ extern "C" {
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "queue.h"
+
 
 // void logAllSensorData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy);
 // void logSingleSensorData(std::ofstream &logfile, float data);
@@ -35,7 +37,7 @@ extern "C" {
 void logData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy);
 void logData(std::ofstream &logfile, float data);
 void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector);
-void logBumpCount(std::ofstream &logfile, int count);
+void logBump(std::ofstream &logfile, queue* q);
 void logAngles(std::ofstream &logfile, float roll, float pitch);
 
 

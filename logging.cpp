@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "queue.h"
 
 auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -66,7 +67,7 @@ void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGy
     }
 }
 
-void logBumpCount(std::ofstream &logfile, int count){
+void logBump(std::ofstream &logfile, queue* q){
     if(logfile.is_open()){
         // Get elapsed time in hours:minutes:seconds format
         std::string elapsed_time = getElapsedTime();
@@ -75,21 +76,10 @@ void logBumpCount(std::ofstream &logfile, int count){
         logfile << elapsed_time << ", ";
 
         logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << count  << std::endl;
+        logfile << q->samples_processed << ", " << q->bump_counter << std::endl;
     }
 }
 
-
-/*
-void logAngles(std::ofstream &logfile, float roll, float pitch) {
-    if (logfile.is_open()) {
-        // Write the normalized values to the file
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << roll << ", " << pitch << std::endl;
-    }
-}
-
-*/
 
 void logAngles(std::ofstream &logfile, float roll, float pitch) {
     if (logfile.is_open()) {

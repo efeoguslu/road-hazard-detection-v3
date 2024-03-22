@@ -121,14 +121,6 @@ double movingAverage(const std::vector<double>& data, int windowSize){
     return sum/windowSize;
 }
 
-float getRollAngle(float ax, float ay, float az){
-    return atan2f(ay, (std::sqrt(ax*ax + az*az)))*radiansToDegrees;
-}
-float getPitchAngle(float ax, float ay, float az){
-    return atan2f(-ax, (std::sqrt(ay*ay + az*az)))*radiansToDegrees;
-}
-
-
 
 void rotateRoll(float rollAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
     *ax_rotated = ax;
@@ -319,7 +311,7 @@ int main() {
     */
 
 
-    //Read the current yaw angle
+    //Do not read the current yaw angle
     device.calc_yaw = false;
 
 
@@ -346,7 +338,7 @@ int main() {
 
 
     queue q1;
-    int bufferSize{ 30 };
+    int bufferSize{ 10 };
     init_queue(&q1, bufferSize);
 
     float mean{ 0 };
@@ -379,8 +371,11 @@ int main() {
             std_dev = calculate_std_dev(&q1, mean);
             variance = calculate_variance(&q1, mean);
 
-
-            std::cout << "Bump Count: " << q1.bump_counter << std::endl;
+            if(q1.bump_detected){
+                std::cout << "Bump Detected at Sample: " << q1.samples_processed <<  " Count: " << q1.bump_counter << std::endl;
+                logBump(bumpCountCircularBufferLogFile, &q1);
+                q1.bump_detected = false;
+            }
 
             logData(meanLogFile, mean);
             logData(standartDeviationLogFile, std_dev);
@@ -508,7 +503,7 @@ int main() {
             logData(bumpCountNaiveSquaredLogFile, bumpCounterNaiveSquared);
         }
         
-        logData(bumpCountCircularBufferLogFile, q1.bump_counter);
+        // logData(bumpCountCircularBufferLogFile, q1.bump_counter);
         
         
 
