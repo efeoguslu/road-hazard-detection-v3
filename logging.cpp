@@ -117,3 +117,39 @@ void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile) {
         }
     }
 }
+
+// Function to create the .plt file
+bool createPlotScript(const std::string& directoryPath) {
+    std::string plotScript = R"(
+        # Set plot title and axis labels
+        set title "Sensor Data Plot"
+        set xlabel "Sample Index"
+        set ylabel "Values"
+
+        # Set data file
+        set datafile separator ','
+
+        # Set y-axis limits
+        set yrange [0:2]
+
+        # Plot data from file as a line graph
+        plot "rotatedAzLogFile.txt" using 0:2 with lines title "rotatedAzLogFile", \
+            "iirFilter.txt" using 0:2 with lines title "iirFilterOutput", \
+            "standartDeviationLogFile.txt" using 0:2 with lines title "standartDeviationLogFile"
+        )";
+
+    std::string plotScriptPath = directoryPath + "plot.plt";
+    std::ofstream plotScriptFile(plotScriptPath);
+
+    if (!plotScriptFile.is_open()) {
+        std::cerr << "Error: Unable to create plot script file." << std::endl;
+        return false;
+    }
+
+    plotScriptFile << plotScript;
+    plotScriptFile.close();
+
+    return true;
+}
+
+

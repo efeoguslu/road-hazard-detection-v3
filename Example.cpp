@@ -40,7 +40,7 @@ float filterAlpha{ 0.5f };
 // ----------------------------------------------------------------------------------------------
 
 FirstOrderIIR filt;
-
+FIRFilter lpfAcc;
 
 // ----------------------------------------------------------------------------------------------
 
@@ -217,21 +217,6 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 }
 
 
-void logBumpsToFile(std::ofstream &logfile, int bumpCount) {
-    // Get current timestamp
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-
-        // Write timestamp and sensor data
-        logfile << std::put_time(std::localtime(&now_c), "%Y-%m-%d %X") << ", ";
-        logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << bumpCount << std::endl;
-}
-
-
-
-
-
 int main() {     
     
 
@@ -244,6 +229,8 @@ int main() {
     */
     
     FirstOrderIIR_Init(&filt, filterAlpha);
+
+    FIRFilter_Init(&lpfAcc);
     
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
@@ -258,6 +245,11 @@ int main() {
     
     if (!createDirectory(directoryPath)) {
         std::cerr << "Error: Unable to create directory." << std::endl;
+        return -1;
+    }
+
+    if (!createPlotScript(directoryPath)) {
+        std::cerr << "Error: Unable to create plot script." << std::endl;
         return -1;
     }
 
@@ -355,6 +347,8 @@ int main() {
         //Get the current gyroscope values
         device.getGyro(&gr, &gp, &gy);
 
+    
+
         //Get the current roll and pitch angles using complementary filter
         complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngleComp, &pitchAngleComp);
 
@@ -363,6 +357,10 @@ int main() {
 
         // First Order IIR Implementation:
         iirFilterOutput = FirstOrderIIR_Update(&filt, az_rotated);
+        
+        // FIRFilter_Update(&lpfAcc, az_rotated);
+        
+
 
         enqueue(&q1, iirFilterOutput);
 
@@ -493,13 +491,13 @@ int main() {
         
         if(iirFilterOutput >= 1.4f){
             bumpCounterNaive++;
-            std::cout << "Bump Count for Naive Case: " << bumpCounterNaive << "\n";
+            // std::cout << "Bump Count for Naive Case: " << bumpCounterNaive << "\n";
             logData(bumpCountNaiveLogFile, bumpCounterNaive);
         }
 
         if(iirFilterOutput*iirFilterOutput >= 1.8f){
             bumpCounterNaiveSquared++;
-            std::cout << "Bump Count for Naive Squared Case: " << bumpCounterNaiveSquared << "\n";
+            // std::cout << "Bump Count for Naive Squared Case: " << bumpCounterNaiveSquared << "\n";
             logData(bumpCountNaiveSquaredLogFile, bumpCounterNaiveSquared);
         }
         
