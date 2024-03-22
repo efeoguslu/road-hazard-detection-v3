@@ -19,7 +19,9 @@ typedef struct{
     int head, tail, num_entries, size;
 
     float previous_range;
-    int bump_counter;
+    static int bump_counter;
+    int min_index;
+    int max_index;
 } queue;
 
 

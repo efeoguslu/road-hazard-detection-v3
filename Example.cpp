@@ -242,6 +242,7 @@ void logBumpsToFile(std::ofstream &logfile, int bumpCount) {
 
 int main() {     
     
+
     
     /*
     if(!toggleFlag()){
@@ -452,8 +453,8 @@ int main() {
 
         // -------------------------------------------------------------------------------------------------------------------------
         
-        /*
         
+        /*
         constexpr int width = 5;
 
         std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
@@ -466,8 +467,11 @@ int main() {
             << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
             << " Roll Angle (deg): "               << std::setw(width) << rollAngleComp << " | "
             << " Pitch Angle (deg): "              << std::setw(width) << pitchAngleComp << std::endl;
-
+        
         */
+        
+
+        
         
         
         /*

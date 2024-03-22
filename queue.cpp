@@ -1,6 +1,6 @@
 #include "queue.h"
 
-constexpr float range_threshold{ 0.3f };
+constexpr float range_threshold{ 0.35f };
 
 void init_queue(queue* q, int max_size){
     q->size = max_size;
@@ -11,6 +11,9 @@ void init_queue(queue* q, int max_size){
 
     q->previous_range = 0.0f;
     q->bump_counter = 0;
+
+    q->min_index = 0;
+    q->max_index = 0;
 }
 
 bool queue_empty(queue* q){
@@ -54,36 +57,29 @@ bool enqueue(queue* q, float value){
     float max_value = q->values[0];
     float min_value = q->values[0];
 
-    int where_is_max = 0;
-    int where_is_min = 0;
+    int new_max_index = 0;
+    int new_min_index = 0;
 
     for(int i = 0; i < q->num_entries; ++i){
         if (q->values[i] > max_value) {
             max_value = q->values[i];
-            where_is_max = i;
+            new_max_index = i;
         }
         if (q->values[i] < min_value) {
             min_value = q->values[i];
-            where_is_min = i;
+            new_min_index = i;
         }
     }
 
-    float new_range = max_value - min_value;
+    if(new_max_index != q->max_index || new_min_index != q->min_index){
 
-    // comparison of new range with previous range
+        q->max_index = new_max_index;
+        q->min_index = new_min_index;
 
-    float range_difference = new_range - q->previous_range;
-
-
-    if(range_difference > 0 && range_difference > range_threshold){
+        if(std::abs(q->values[q->max_index] - q->values[q->min_index]) > range_threshold){
         q->bump_counter++;
-        // ... ??????
+        }
     }
-    else if(range_difference <= 0 && std::abs(range_difference) > range_threshold){
-        // ... ??????
-    }
-
-    q->previous_range = new_range;
 
     return true;
 }
