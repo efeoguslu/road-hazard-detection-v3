@@ -94,6 +94,18 @@ void logAngles(std::ofstream &logfile, float roll, float pitch) {
     }
 }
 
+void logUser(std::ofstream &logfile, unsigned int state){
+    if(logfile.is_open()){
+        // Get elapsed time in hours:minutes:seconds format
+        std::string elapsed_time = getElapsedTime();
+
+        // Write elapsed time and sensor data
+        logfile << elapsed_time << ", ";
+
+        logfile << state << std::endl;
+    }
+}
+
 
 void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile) {
     if (!inputFile.is_open()) {
@@ -130,12 +142,14 @@ bool createPlotScript(const std::string& directoryPath) {
         set datafile separator ','
 
         # Set y-axis limits
-        set yrange [0:2]
+        # set yrange [0:2]
 
         # Plot data from file as a line graph
         plot "rotatedAzLogFile.txt" using 0:2 with lines title "rotatedAzLogFile", \
-            "iirFilter.txt" using 0:2 with lines title "iirFilterOutput", \
-            "standartDeviationLogFile.txt" using 0:2 with lines title "standartDeviationLogFile"
+            "iirFilterLogFile.txt" using 0:2 with lines title "iirFilterOutput", \
+            "firFilterLogFile.txt" using 0:2 with lines title "firFilterOutput", \
+            "standartDeviationLogFile.txt" using 0:2 with lines title "standartDeviationLogFile", \
+            "userInputLogFile.txt" using 0:2 with lines title "user"
         )";
 
     std::string plotScriptPath = directoryPath + "plot.plt";

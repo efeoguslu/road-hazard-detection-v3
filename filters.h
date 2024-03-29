@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-#define FIR_FILTER_LENGTH (16)
+#define FIR_FILTER_LENGTH (15)
 
 typedef struct{
     float alpha;

@@ -32,6 +32,7 @@ void logData(std::ofstream &logfile, float data);
 void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector);
 void logBump(std::ofstream &logfile, queue* q);
 void logAngles(std::ofstream &logfile, float roll, float pitch);
+void logUser(std::ofstream &logfile, unsigned int state);
 
 
 void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile);

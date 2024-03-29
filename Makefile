@@ -5,13 +5,13 @@ CXX ?= g++
 CXXFLAGS = -std=c++20
 
 # Define the linker flags
-LDFLAGS = -li2c
+LDFLAGS = -li2c -lwiringPi
 
 # Define the target executable
 TARGET = Example
 
 # Define the source files
-SRCS = Example.cpp MPU6050.cpp logging.cpp filters.cpp queue.cpp
+SRCS = Example.cpp MPU6050.cpp logging.cpp filters.cpp queue.cpp gpio.cpp
 
 # Define the object files
 OBJS = $(SRCS:.cpp=.o)

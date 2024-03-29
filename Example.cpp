@@ -18,6 +18,7 @@
 #include "MPU6050.h"
 #include "filters.h"
 #include "queue.h"
+#include "gpio.h"
 
 MPU6050 device(0x68, false);
 
@@ -37,10 +38,14 @@ float dt{ 0 };
 
 float filterAlpha{ 0.5f };
 
+// Define the pin we are going to use
+const int ledPin = 17; // Example: GPIO 17
+const int buttonPin = 16;
+
 // ----------------------------------------------------------------------------------------------
 
-FirstOrderIIR filt;
-FIRFilter lpfAcc;
+FirstOrderIIR iirFilt;
+FIRFilter firFilt;
 
 // ----------------------------------------------------------------------------------------------
 
@@ -218,19 +223,21 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 
 
 int main() {     
-    
 
-    
-    /*
-    if(!toggleFlag()){
-        std::cout << "Logging has already occured. Exiting. (Flag == 0)" << std::endl;
-        return 0;
-    }
-    */
-    
-    FirstOrderIIR_Init(&filt, filterAlpha);
+    // Initialize wiringPi and allow the use of BCM pin numbering
+    wiringPiSetupGpio();
 
-    FIRFilter_Init(&lpfAcc);
+    // Setup the pin as output
+    pinMode(ledPin, OUTPUT);
+    // Configure the pin as input
+    pinMode(buttonPin, INPUT); 
+
+    // Blink the LED 3 times with a delay of 1 second between each state change
+    blink_led(ledPin, 3, 10);
+
+    // Initialize Filters
+    FirstOrderIIR_Init(&iirFilt, filterAlpha);
+    FIRFilter_Init(&firFilt);
     
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
@@ -287,11 +294,14 @@ int main() {
     std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
     std::ofstream bumpCount(directoryPath + "bumpCount.txt");
 
-    std::ofstream iirFilter(directoryPath + "iirFilter.txt");
+    std::ofstream iirFilterLogFile(directoryPath + "iirFilterLogFile.txt");
+    std::ofstream firFilterLogFile(directoryPath + "firFilterLogFile.txt");
 
     std::ofstream meanLogFile(directoryPath + "meanLogFile.txt");
     std::ofstream standartDeviationLogFile(directoryPath + "standartDeviationLogFile.txt");
     std::ofstream varianceLogFile(directoryPath + "varianceLogFile.txt");
+
+    std::ofstream userInputLogFile(directoryPath + "userInputLogFile.txt");
 
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
@@ -325,17 +335,21 @@ int main() {
     float rollAngleComp{ 0.0f };
 
 
-
-    float iirFilterOutput{ 0 };
+    float iirFilterOutput{ 0.0f };
+    float firFilterOutput{ 0.0f };
 
 
     queue q1;
+    
     int bufferSize{ 10 };
     init_queue(&q1, bufferSize);
 
-    float mean{ 0 };
-    float std_dev{ 0 };
-    float variance{ 0 };
+    float mean{ 0.0f };
+    float std_dev{ 0.0f };
+    float variance{ 0.0f };
+
+
+    
 
     while(true){
         // Record loop time stamp
@@ -355,13 +369,12 @@ int main() {
         // Rotation:
         rotateAll(rollAngleComp*degreesToRadians, pitchAngleComp*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
 
-        // First Order IIR Implementation:
-        iirFilterOutput = FirstOrderIIR_Update(&filt, az_rotated);
-        
-        // FIRFilter_Update(&lpfAcc, az_rotated);
-        
+        // First Order IIR and FIR Implementation:
+        iirFilterOutput = FirstOrderIIR_Update(&iirFilt, az_rotated);
+        firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
 
 
+        // Change this for filter:
         enqueue(&q1, iirFilterOutput);
 
         if(queue_full(&q1)){
@@ -482,13 +495,10 @@ int main() {
 
         */
 
+        // -------------------------------------------------------------------------------------------------------------------------
         
         
-        // Logging:
-        
-        // Most of the algorithmic changes will be made here:
-
-        
+        /*
         if(iirFilterOutput >= 1.4f){
             bumpCounterNaive++;
             // std::cout << "Bump Count for Naive Case: " << bumpCounterNaive << "\n";
@@ -500,41 +510,52 @@ int main() {
             // std::cout << "Bump Count for Naive Squared Case: " << bumpCounterNaiveSquared << "\n";
             logData(bumpCountNaiveSquaredLogFile, bumpCounterNaiveSquared);
         }
+        */
         
-        // logData(bumpCountCircularBufferLogFile, q1.bump_counter);
         
         
+        
+        
+        // -------------------------------------------------------------------------------------------------------------------------
 
 
         
         
-        
-
-        
+        /*
         std::vector<std::ofstream*> logFiles = {&axLogFile, &ayLogFile, &azLogFile, &grLogFile, &gpLogFile, &gyLogFile};
         std::vector<float> data = {ax, ay, az, gr, gp, gy}; 
 
         for (size_t i = 0; i < logFiles.size(); ++i) {
             logData(*logFiles[i], data[i]);
         }
+        */
+
+        // -------------------------------------------------------------------------------------------------------------------------
+
+        
         
         logData(rotatedAzLogFile, az_rotated);
-        logData(iirFilter, iirFilterOutput); // az_rotated is filtered with IIR 
+        logData(iirFilterLogFile, iirFilterOutput); // az_rotated is filtered with IIR 
+        logData(firFilterLogFile, firFilterOutput); // az_rotated is filtered with FIR
 
         logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
-
         logData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
 
+        /*
         axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
         ayMovingAvg.updateAndLogMovingAverage(ayFilteredLogFile, ay);
         azMovingAvg.updateAndLogMovingAverage(azFilteredLogFile, az);
-        
-        
-        rotatedAzMovingAvg.updateAndLogMovingAverage(rotatedAzFilteredLogFile, az_rotated);        
+        rotatedAzMovingAvg.updateAndLogMovingAverage(rotatedAzFilteredLogFile, az_rotated); 
+        */
+               
        
        
+        // Check the button state
+        unsigned int state = digitalRead(buttonPin) == LOW ? 1 : 0;
 
+        // Log the button state
+        logUser(userInputLogFile, state);
 
 
 
