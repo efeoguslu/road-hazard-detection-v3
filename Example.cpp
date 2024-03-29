@@ -36,7 +36,7 @@ const float degreesToRadians{ 0.0174532925 };
 int time2Delay{ 0 };
 float dt{ 0 };
 
-float filterAlpha{ 0.5f };
+float filterAlpha{ 0.25f };
 
 // Define the pin we are going to use
 const int ledPin = 17; // Example: GPIO 17
@@ -223,7 +223,7 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 
 
 int main() {     
-
+    
     // Initialize wiringPi and allow the use of BCM pin numbering
     wiringPiSetupGpio();
 
@@ -232,8 +232,8 @@ int main() {
     // Configure the pin as input
     pinMode(buttonPin, INPUT); 
 
-    // Blink the LED 3 times with a delay of 1 second between each state change
-    blink_led(ledPin, 3, 10);
+    // Blink the LED 3 times with a delay of 0.1 second between each state change
+    blink_led(ledPin, 3, 100);
 
     // Initialize Filters
     FirstOrderIIR_Init(&iirFilt, filterAlpha);
@@ -349,6 +349,8 @@ int main() {
     float variance{ 0.0f };
 
 
+    std::vector<int> verticalLineIndices;
+
     
 
     while(true){
@@ -380,17 +382,17 @@ int main() {
         if(queue_full(&q1)){
             mean = calculate_mean(&q1);
             std_dev = calculate_std_dev(&q1, mean);
-            variance = calculate_variance(&q1, mean);
 
             if(q1.bump_detected){
                 std::cout << "Bump Detected at Sample: " << q1.samples_processed <<  " Count: " << q1.bump_counter << std::endl;
+                // Add the sample index to the vector
+                verticalLineIndices.push_back(q1.samples_processed);
                 logBump(bumpCountCircularBufferLogFile, &q1);
                 q1.bump_detected = false;
             }
 
             logData(meanLogFile, mean);
             logData(standartDeviationLogFile, std_dev);
-            logData(varianceLogFile, variance);
 
         }
 

@@ -38,7 +38,5 @@ void logUser(std::ofstream &logfile, unsigned int state);
 void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile);
 bool createPlotScript(const std::string& directoryPath);
 
-
-
 #endif // LOGGING_H
 

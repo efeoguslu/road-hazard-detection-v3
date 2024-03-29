@@ -5,4 +5,5 @@ MPU6050.o
 logging.o
 filters.o
 queue.o
+gpio.o
 logs/*
