@@ -6,4 +6,3 @@ logging.o
 filters.o
 queue.o
 gpio.o
-logs/*
