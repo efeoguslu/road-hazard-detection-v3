@@ -220,10 +220,19 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 	clock_gettime(CLOCK_REALTIME, &device.start); //Save time to start clock
 
 }
-
+void lowThresholdUpdate(float* output, float x){
+    if(x >= 0.8f && x <= 1.19f){
+        *output = 0.0f;
+    }
+    else if(x < 0.8f){
+        *output = x - 1.0f; // This will return a negative value for inputs smaller than 0.8
+    }
+    else{
+        *output = x - 1.0f; // This will return the same output for inputs larger than 1.2
+    }
+}
 
 int main() {     
-    
     // Initialize wiringPi and allow the use of BCM pin numbering
     wiringPiSetupGpio();
 
@@ -242,6 +251,8 @@ int main() {
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
     float ax_rotated, ay_rotated, az_rotated; // Variables to store the rotated acceleration
+
+    float lowThresholdOutput;
 
     sleep(1); // Wait for the system clock to get ready
 
@@ -268,6 +279,7 @@ int main() {
     std::ofstream bumpCountNaiveLogFile(directoryPath + "bumpCountNaiveLogFile.txt");
     std::ofstream bumpCountNaiveSquaredLogFile(directoryPath + "bumpCountNaiveSquaredLogFile.txt");
     std::ofstream bumpCountCircularBufferLogFile(directoryPath + "bumpCountCircularBufferLogFile.txt");
+    std::ofstream bumpCountLowThresholdLogFile(directoryPath + "bumpCountLowThresholdLogFile.txt");
 
     std::ofstream axLogFile(directoryPath + "axLogFile.txt");
     std::ofstream ayLogFile(directoryPath + "ayLogFile.txt");
@@ -302,7 +314,8 @@ int main() {
     std::ofstream varianceLogFile(directoryPath + "varianceLogFile.txt");
 
     std::ofstream userInputLogFile(directoryPath + "userInputLogFile.txt");
-
+    
+    std::ofstream lowThresholdLogFile(directoryPath + "lowThresholdLogFile.txt");
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
      !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() ||\
@@ -340,9 +353,11 @@ int main() {
 
 
     queue q1;
+    queue q2;
     
     int bufferSize{ 10 };
     init_queue(&q1, bufferSize);
+    init_queue(&q2, bufferSize);
 
     float mean{ 0.0f };
     float std_dev{ 0.0f };
@@ -375,6 +390,9 @@ int main() {
         iirFilterOutput = FirstOrderIIR_Update(&iirFilt, az_rotated);
         firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
 
+        // Zeroing
+        lowThresholdUpdate(&lowThresholdOutput, az_rotated);
+        logData(lowThresholdLogFile, lowThresholdOutput);
 
         // Change this for filter:
         enqueue(&q1, iirFilterOutput);
@@ -394,6 +412,16 @@ int main() {
             logData(meanLogFile, mean);
             logData(standartDeviationLogFile, std_dev);
 
+        }
+
+        enqueue(&q2, lowThresholdOutput);
+
+        if(queue_full(&q2)){
+            if(q2.bump_detected){
+                std::cout << "Bump Detected at Sample: " << q2.samples_processed <<  " Count: " << q2.bump_counter << std::endl;
+                logBump(bumpCountLowThresholdLogFile, &q2);
+                q2.bump_detected = false;
+            }
         }
 
 
