@@ -20,6 +20,8 @@
 #include "queue.h"
 #include "gpio.h"
 
+#include "common-structs.hpp"
+
 MPU6050 device(0x68, false);
 
 const int windowSizeMovingAverage{ 5 };
@@ -33,7 +35,7 @@ const float radiansToDegrees{ 57.2957795f };
 const float degreesToRadians{ 0.0174532925f };
 
 
-int time2Delay{ 0 };
+// int time2Delay{ 0 };
 float dt{ 0.0f };
 
 float filterAlpha{ 0.95f };
@@ -115,11 +117,12 @@ float timeSync(auto t1){
     // Calculate dt
     auto t3 = std::chrono::high_resolution_clock::now();
     auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t1);
-    float dt = static_cast<float>(duration2.count()) * 1E-6; // Explicitly cast to float
+    dt = static_cast<float>(duration2.count()) * 1E-6; // Explicitly cast to float
 
     // Return dt and begin main loop again
     return dt;
 }
+
 
 void complementaryFilter(float ax, float ay, float az, float gr, float gp, float gy, float* rollAngle, float* pitchAngle){
 
@@ -188,6 +191,10 @@ void lowThresholdUpdate(float* output, float x){
         *output = x - 1.0f; // This will return the same output for inputs larger than 1.2
     }
 }
+
+typedef struct{
+    float ax, ay, az, gr, gp, gy;
+}sensorData;
 
 int main() {     
     // Initialize wiringPi and allow the use of BCM pin numbering
@@ -275,6 +282,8 @@ int main() {
     
     std::ofstream lowThresholdLogFile(directoryPath + "lowThresholdLogFile.txt");
 
+    std::ofstream allSensorDataLogFile(directoryPath + "allSensorDataLogFile.txt");
+
 
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
@@ -304,14 +313,12 @@ int main() {
     float pitchAngleComp{ 0.0f };
     float rollAngleComp{ 0.0f };
 
-
     float iirFilterOutput{ 0.0f };
 
     // float firFilterOutput{ 0.0f };
 
 
     queue q1, q2;
-
 
     int circularBufferSize{ 10 };
     init_queue(&q1, circularBufferSize);
@@ -325,6 +332,16 @@ int main() {
     while(true){
         // Record loop time stamp
         auto startTime{std::chrono::high_resolution_clock::now()};
+
+        // Convert high_resolution_clock::time_point to system_clock::time_point
+        auto systemTimePoint = std::chrono::time_point_cast<std::chrono::system_clock::duration>(startTime - std::chrono::high_resolution_clock::now() + std::chrono::system_clock::now());
+
+        // Convert system_clock::time_point to std::time_t
+        std::time_t now = std::chrono::system_clock::to_time_t(systemTimePoint);
+
+        // Print the time
+        // std::cout << std::ctime(&now) << std::endl;
+
 
         //Get the current accelerometer values
         device.getAccel(&ax, &ay, &az);
@@ -534,6 +551,15 @@ int main() {
         unsigned int state = digitalRead(buttonPin) == LOW ? 1 : 0;
         // Log the button state
         logUser(userInputLogFile, state);
+
+        std::string logOut = "ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+",gr="+std::to_string(gr)+\
+                            ",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+",roll_angle="+std::to_string(rollAngleComp)+",pitch_angle="+\
+                            std::to_string(pitchAngleComp)+"ax_rotated="+std::to_string(ax_rotated)+"ay_rotated="+std::to_string(ay_rotated)+\
+        "az_rotated="+std::to_string(az_rotated);
+
+        // TO BE CONTINUED
+
+        TLogger::TLogInfo(logOut);
 
 
 

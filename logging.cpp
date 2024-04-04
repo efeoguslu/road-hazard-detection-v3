@@ -1,5 +1,6 @@
 #include "logging.h"
 #include "queue.h"
+#include <sys/time.h>
 
 auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -10,9 +11,9 @@ std::string getElapsedTime() {
     auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - t1).count();
 
     // Calculate hours, minutes, and remaining seconds
-    int hours = elapsed_seconds / 3600;
-    int minutes = (elapsed_seconds % 3600) / 60;
-    int seconds = elapsed_seconds % 60;
+    auto hours = elapsed_seconds / 3600;
+    auto minutes = (elapsed_seconds % 3600) / 60;
+    auto seconds = elapsed_seconds % 60;
 
     // Format elapsed time as hours:minutes:seconds
     std::ostringstream elapsed_time;

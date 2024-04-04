@@ -130,7 +130,7 @@ float calculate_mean(queue* q) {
     for (int i = 0; i < q->size; i++) {
         sum += q->values[i];
     }
-    return sum / q->size;
+    return (sum / (float)q->size);
 }
 
 float calculate_std_dev(queue* q, float mean) {
@@ -139,8 +139,8 @@ float calculate_std_dev(queue* q, float mean) {
         float diff = q->values[i] - mean;
         sum_of_sq_diff += diff * diff;
     }
-    float variance = sum_of_sq_diff / q->size;
-    return sqrt(variance);
+    float variance = sum_of_sq_diff / (float)q->size;
+    return std::sqrt(variance);
 }
 
 float calculate_variance(queue* q, float mean) {
@@ -149,7 +149,7 @@ float calculate_variance(queue* q, float mean) {
         float diff = q->values[i] - mean;
         sum_of_sq_diff += diff * diff;
     }
-    float variance = sum_of_sq_diff / q->size;
+    float variance = sum_of_sq_diff / (float)q->size;
     return variance;
 }
 
