@@ -22,30 +22,30 @@
 
 MPU6050 device(0x68, false);
 
-const int windowSize{ 5 };
+const int windowSizeMovingAverage{ 5 };
 
 const int sampleRateHz{ 75 };                  // Sample rate in Hz
 const int loopDurationMs{ 1000 / sampleRateHz }; // Duration of each loop iteration in milliseconds
 
-const float gravity_mps2{ 9.80665 };
-const float tau{ 0.05 };
-const float radiansToDegrees{ 57.2957795 };
-const float degreesToRadians{ 0.0174532925 };
+const float gravity_mps2{ 9.80665f };
+const float tau{ 0.05f };
+const float radiansToDegrees{ 57.2957795f };
+const float degreesToRadians{ 0.0174532925f };
 
 
 int time2Delay{ 0 };
-float dt{ 0 };
+float dt{ 0.0f };
 
-float filterAlpha{ 0.25f };
+float filterAlpha{ 0.95f };
 
 // Define the pin we are going to use
-const int ledPin = 17; // Example: GPIO 17
-const int buttonPin = 16;
+const int ledPin{ 17 }; // Example: GPIO 17
+const int buttonPin{ 16 };
 
 // ----------------------------------------------------------------------------------------------
 
 FirstOrderIIR iirFilt;
-FIRFilter firFilt;
+// FIRFilter firFilt;
 
 // ----------------------------------------------------------------------------------------------
 
@@ -78,29 +78,6 @@ class MovingAverage {
         }
 };
 
-
-bool toggleFlag() {
-    std::ifstream flagFile("flag.txt");
-    int flag = 0; // Default flag value
-    if (flagFile.is_open()) {
-        flagFile >> flag;
-        flagFile.close();
-    }
-    // Toggle the flag
-    flag = (flag == 0) ? 1 : 0;
-
-    std::ofstream flagFileOut("flag.txt");
-    if (flagFileOut.is_open()) {
-        flagFileOut << flag;
-        flagFileOut.close();
-    } else {
-        std::cerr << "Error: Unable to update flag file." << std::endl;
-        return false; // Indicate failure to update the flag
-    }
-
-    return (flag == 1); // Return true if logging should proceed
-}
-
 // Function to get the current timestamp as a string
 std::string getCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
@@ -118,29 +95,6 @@ float compoundVector(float x, float y, float z){
     return std::sqrt(x*x + y*y + z*z);
 }
 
-double movingAverage(const std::vector<double>& data, int windowSize){
-    double sum = 0.0;
-    for(int i = 0; i < windowSize; ++i){
-        sum += data[i];
-    }
-    return sum/windowSize;
-}
-
-
-void rotateRoll(float rollAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
-    *ax_rotated = ax;
-    *ay_rotated = ay*cosf(rollAngle) + az*sinf(rollAngle);
-    *az_rotated = ay*sinf(rollAngle) - az*cosf(rollAngle);
-}
-
-void rotatePitch(float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
-    *ax_rotated = ax*cosf(pitchAngle) + az*sinf(pitchAngle);
-    *ay_rotated = ay;
-    *az_rotated = -ax*sinf(pitchAngle) + az*cosf(pitchAngle);
-}
-
-// WINNER:
-
 void rotateAll(float rollAngle, float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
 
     *ax_rotated =  ax*cosf(pitchAngle)                                      + az*sinf(pitchAngle);
@@ -150,30 +104,33 @@ void rotateAll(float rollAngle, float pitchAngle, float ax, float ay, float az, 
 
 // Time stabilization function
 float timeSync(auto t1){
-	// Find duration to sleep thread
-	auto t2 = std::chrono::high_resolution_clock::now();
-	time2Delay = std::chrono::duration<float, std::micro>(t2-t1).count();
+    // Find duration to sleep thread
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    int time2Delay = duration.count(); // Convert to int for sleep_for
 
-	// Sleep thread
-	std::this_thread::sleep_for(std::chrono::microseconds(loopDurationMs-time2Delay));
+    // Sleep thread
+    std::this_thread::sleep_for(std::chrono::microseconds(loopDurationMs - time2Delay));
 
-	// Calculate dt
-	auto t3 = std::chrono::high_resolution_clock::now();
-	dt = (std::chrono::duration<float, std::micro>(t3-t1).count()) * 1E-6;
-	// std::cout << "\t" << 1/dt << std::endl;
+    // Calculate dt
+    auto t3 = std::chrono::high_resolution_clock::now();
+    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t1);
+    float dt = static_cast<float>(duration2.count()) * 1E-6; // Explicitly cast to float
 
-	// Return dt and begin main loop again
-	return dt;
+    // Return dt and begin main loop again
+    return dt;
 }
 
 void complementaryFilter(float ax, float ay, float az, float gr, float gp, float gy, float* rollAngle, float* pitchAngle){
 
-    clock_gettime(CLOCK_REALTIME, &device.start); //Read current time into start variable
+    // clock_gettime(CLOCK_REALTIME, &device.start); //Read current time into start variable
+
+
 	//X (roll) axis
-	device._accel_angle[0] = atan2(az, ay) * RAD_T_DEG - 90.0; //Calculate the angle with z and y convert to degrees and subtract 90 degrees to rotate
+	device._accel_angle[0] = atan2f(az, ay) * radiansToDegrees - 90.0f; //Calculate the angle with z and y convert to degrees and subtract 90 degrees to rotate
 	device._gyro_angle[0] = device._angle[0] + gr*dt; //Use roll axis (X axis)
 	//Y (pitch) axis
-	device._accel_angle[1] = atan2(az, ax) * RAD_T_DEG - 90.0; //Calculate the angle with z and x convert to degrees and subtract 90 degrees to rotate
+	device._accel_angle[1] = atan2f(az, ax) * radiansToDegrees - 90.0f; //Calculate the angle with z and x convert to degrees and subtract 90 degrees to rotate
 	device._gyro_angle[1] = device._angle[1] + gp*dt; //Use pitch axis (Y axis)
 	//Z (yaw) axis
 	if (device.calc_yaw) {
@@ -186,15 +143,15 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 		device._gyro_angle[2] = 0; //Set the yaw axis to zero (because the angle cannot be calculated with the accelerometer when vertical)
 		device._first_run = 0;
 	}
-	float asum = abs(ax) + abs(ay) + abs(az); //Calculate the sum of the accelerations
-	float gsum = abs(gr) + abs(gp) + abs(gy); //Calculate the sum of the gyro readings
+	float asum = std::fabs(ax) + std::fabs(ay) + std::fabs(az); //Calculate the sum of the accelerations
+	float gsum = std::fabs(gr) + std::fabs(gp) + std::fabs(gy); //Calculate the sum of the gyro readings
 	for (int i = 0; i <= 1; i++) { //Loop through roll and pitch axes
-		if (abs(device._gyro_angle[i] - device._accel_angle[i]) > 5) { //Correct for very large drift (or incorrect measurment of gyroscope by longer loop time)
+		if (std::fabs(device._gyro_angle[i] - device._accel_angle[i]) > 5) { //Correct for very large drift (or incorrect measurment of gyroscope by longer loop time)
 			device._gyro_angle[i] = device._accel_angle[i];
 		}
 		//Create result from either complementary filter or directly from gyroscope or accelerometer depending on conditions
 		if (asum > 0.1 && asum < 3 && gsum > 0.3) { //Check that th movement is not very high (therefore providing inacurate angles)
-			device._angle[i] = (1 - TAU)*(device._gyro_angle[i]) + (TAU)*(device._accel_angle[i]); //Calculate the angle using a complementary filter
+			device._angle[i] = (1.0f - tau)*(device._gyro_angle[i]) + (tau)*(device._accel_angle[i]); //Calculate the angle using a complementary filter
 		}
 		else if (gsum > 0.3) { //Use the gyroscope angle if the acceleration is high
 			device._angle[i] = device._gyro_angle[i];
@@ -215,9 +172,9 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
     *rollAngle = device._angle[0];
     *pitchAngle = device._angle[1];
 
-    clock_gettime(CLOCK_REALTIME, &device.end); //Save time to end clock
-	dt = (device.end.tv_sec - device.start.tv_sec) + (device.end.tv_nsec - device.start.tv_nsec) / 1e9; //Calculate new dt
-	clock_gettime(CLOCK_REALTIME, &device.start); //Save time to start clock
+    // clock_gettime(CLOCK_REALTIME, &device.end); //Save time to end clock
+	// dt = (device.end.tv_sec - device.start.tv_sec) + (device.end.tv_nsec - device.start.tv_nsec) / 1e9; //Calculate new dt
+	// clock_gettime(CLOCK_REALTIME, &device.start); //Save time to start clock
 
 }
 void lowThresholdUpdate(float* output, float x){
@@ -238,6 +195,7 @@ int main() {
 
     // Setup the pin as output
     pinMode(ledPin, OUTPUT);
+
     // Configure the pin as input
     pinMode(buttonPin, INPUT); 
 
@@ -246,7 +204,7 @@ int main() {
 
     // Initialize Filters
     FirstOrderIIR_Init(&iirFilt, filterAlpha);
-    FIRFilter_Init(&firFilt);
+    // FIRFilter_Init(&firFilt);
     
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
@@ -316,6 +274,8 @@ int main() {
     std::ofstream userInputLogFile(directoryPath + "userInputLogFile.txt");
     
     std::ofstream lowThresholdLogFile(directoryPath + "lowThresholdLogFile.txt");
+
+
     /*
     if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
      !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() ||\
@@ -329,44 +289,38 @@ int main() {
     //Do not read the current yaw angle
     device.calc_yaw = false;
 
-
-    //Get bump counts for different cases (Other than buffer)
-    int bumpCounterNaive{ 0 };
-    int bumpCounterNaiveSquared{ 0 };
-
-    // TODO: add cases for mean, variance and std. dev.
-
-    MovingAverage<float> axMovingAvg(windowSize);
-    MovingAverage<float> ayMovingAvg(windowSize);
-    MovingAverage<float> azMovingAvg(windowSize);
+    /*
+    MovingAverage<float> axMovingAvg(windowSizeMovingAverage);
+    MovingAverage<float> ayMovingAvg(windowSizeMovingAverage);
+    MovingAverage<float> azMovingAvg(windowSizeMovingAverage);
     
-    MovingAverage<float> compoundAccelMovingAvg(windowSize);
+    MovingAverage<float> compoundAccelMovingAvg(windowSizeMovingAverage);
 
-    MovingAverage<float> rotatedAzMovingAvg(windowSize);
+    MovingAverage<float> rotatedAzMovingAvg(windowSizeMovingAverage);
+    */
+
+    
 
     float pitchAngleComp{ 0.0f };
     float rollAngleComp{ 0.0f };
 
 
     float iirFilterOutput{ 0.0f };
-    float firFilterOutput{ 0.0f };
+
+    // float firFilterOutput{ 0.0f };
 
 
-    queue q1;
-    queue q2;
-    
-    int bufferSize{ 10 };
-    init_queue(&q1, bufferSize);
-    init_queue(&q2, bufferSize);
+    queue q1, q2;
+
+
+    int circularBufferSize{ 10 };
+    init_queue(&q1, circularBufferSize);
+    init_queue(&q2, circularBufferSize);
 
     float mean{ 0.0f };
     float std_dev{ 0.0f };
-    float variance{ 0.0f };
-
 
     std::vector<int> verticalLineIndices;
-
-    
 
     while(true){
         // Record loop time stamp
@@ -374,11 +328,8 @@ int main() {
 
         //Get the current accelerometer values
         device.getAccel(&ax, &ay, &az);
-
         //Get the current gyroscope values
         device.getGyro(&gr, &gp, &gy);
-
-    
 
         //Get the current roll and pitch angles using complementary filter
         complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngleComp, &pitchAngleComp);
@@ -388,9 +339,10 @@ int main() {
 
         // First Order IIR and FIR Implementation:
         iirFilterOutput = FirstOrderIIR_Update(&iirFilt, az_rotated);
-        firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
 
-        // Zeroing
+        //firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
+
+        // Zeroing Implementation
         lowThresholdUpdate(&lowThresholdOutput, az_rotated);
         logData(lowThresholdLogFile, lowThresholdOutput);
 
@@ -503,11 +455,7 @@ int main() {
             << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
             << " Roll Angle (deg): "               << std::setw(width) << rollAngleComp << " | "
             << " Pitch Angle (deg): "              << std::setw(width) << pitchAngleComp << std::endl;
-        
         */
-        
-
-        
         
         
         /*
@@ -566,7 +514,8 @@ int main() {
         
         logData(rotatedAzLogFile, az_rotated);
         logData(iirFilterLogFile, iirFilterOutput); // az_rotated is filtered with IIR 
-        logData(firFilterLogFile, firFilterOutput); // az_rotated is filtered with FIR
+        
+        // logData(firFilterLogFile, firFilterOutput); // az_rotated is filtered with FIR
 
         logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
         logData(sensorLogFile, ax, ay, az, gr, gp, gy);
@@ -583,7 +532,6 @@ int main() {
        
         // Check the button state
         unsigned int state = digitalRead(buttonPin) == LOW ? 1 : 0;
-
         // Log the button state
         logUser(userInputLogFile, state);
 

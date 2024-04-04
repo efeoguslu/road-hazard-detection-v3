@@ -2,6 +2,7 @@
 #define FILTERS_H
 
 #include <cstdint>
+#include <vector>
 
 #define FIR_FILTER_LENGTH (39)
 
@@ -37,7 +38,7 @@ typedef struct{
 void FIRFilter_Init(FIRFilter *fir);
 float FIRFilter_Update(FIRFilter *fir, float inp);
 
-
+double movingAverage(const std::vector<double>& data, int windowSize);
 
 
 

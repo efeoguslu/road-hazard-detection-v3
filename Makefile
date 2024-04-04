@@ -2,7 +2,7 @@
 CXX ?= g++
 
 # Define any compile-time flags
-CXXFLAGS = -std=c++20
+CXXFLAGS = -std=c++20 -O2 -Wall -Wextra -Wconversion
 
 # Define the linker flags
 LDFLAGS = -li2c -lwiringPi

@@ -154,3 +154,14 @@ float FIRFilter_Update(FIRFilter *fir, float inp){
 
     return fir->out;
 }
+
+
+// 
+
+double movingAverage(const std::vector<double>& data, int windowSize){
+    double sum = 0.0;
+    for(int i = 0; i < windowSize; ++i){
+        sum += data[i];
+    }
+    return sum/windowSize;
+}
