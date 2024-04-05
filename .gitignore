@@ -6,3 +6,4 @@ logging.o
 filters.o
 queue.o
 gpio.o
+detection.o

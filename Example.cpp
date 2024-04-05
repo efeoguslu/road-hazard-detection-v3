@@ -23,9 +23,8 @@
 
 #include "common-structs.hpp"
 
-MPU6050 device(0x68, false);
 
-const int windowSizeMovingAverage{ 5 };
+MPU6050 device(0x68, false);
 
 const int sampleRateHz{ 75 };                  // Sample rate in Hz
 const int loopDurationMs{ 1000 / sampleRateHz }; // Duration of each loop iteration in milliseconds
@@ -35,11 +34,9 @@ const float tau{ 0.05f };
 const float radiansToDegrees{ 57.2957795f };
 const float degreesToRadians{ 0.0174532925f };
 
-
-// int time2Delay{ 0 };
 float dt{ 0.0f };
 
-float filterAlpha{ 0.95f };
+const float filterAlpha{ 0.80f };
 
 // Define the pin we are going to use
 const int ledPin{ 17 }; // Example: GPIO 17
@@ -221,10 +218,10 @@ int main(){
 
     sleep(1); // Wait for the system clock to get ready
 
-
     const std::string timestamp = getCurrentTimestamp();
     const std::string directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
-    const std::string fileName = "allSensorLogFile.txt";
+    const std::string allSensorLogFile = "allSensorLogFile.txt";
+    const std::string sensorLogFileWithoutText = "sensorLogFileWithoutText.txt";
     
     
     if (!createDirectory(directoryPath)) {
@@ -239,84 +236,12 @@ int main(){
 
     // Input/Output Files:
     std::ofstream bumpCountCircularBufferLogFile(directoryPath + "bumpCountCircularBufferLogFile.txt");
-    /*
-    std::ofstream sensorLogFile(directoryPath + "sensorLogFile.txt");
-    std::ofstream compoundVectorLogFile(directoryPath + "compoundVectorLogFile.txt");
-
-    std::ofstream bumpCountNaiveLogFile(directoryPath + "bumpCountNaiveLogFile.txt");
-    std::ofstream bumpCountNaiveSquaredLogFile(directoryPath + "bumpCountNaiveSquaredLogFile.txt");
-    
-    std::ofstream bumpCountLowThresholdLogFile(directoryPath + "bumpCountLowThresholdLogFile.txt");
-
-    std::ofstream axLogFile(directoryPath + "axLogFile.txt");
-    std::ofstream ayLogFile(directoryPath + "ayLogFile.txt");
-    std::ofstream azLogFile(directoryPath + "azLogFile.txt");
-
-    std::ofstream grLogFile(directoryPath + "grLogFile.txt");
-    std::ofstream gpLogFile(directoryPath + "gpLogFile.txt");
-    std::ofstream gyLogFile(directoryPath + "gyLogFile.txt");     
-    
-    std::ofstream anglesLogFile(directoryPath + "anglesLogFile.txt");
-    std::ifstream inputForFilter(directoryPath +  "inputForFilter.txt");
-
-    std::ofstream axFilteredLogFile(directoryPath +  "axFilteredLogFile.txt");
-    std::ofstream ayFilteredLogFile(directoryPath +  "ayFilteredLogFile.txt");
-    std::ofstream azFilteredLogFile(directoryPath +  "azFilteredLogFile.txt");
-
-    std::ofstream compoundVectorFilteredLogFile(directoryPath +  "compoundVectorFilteredLogFile.txt");
-
-    std::ofstream rotatedAzLogFile(directoryPath +  "rotatedAzLogFile.txt");
-    std::ofstream rotatedAzFilteredLogFile(directoryPath +  "rotatedAzFilteredLogFile.txt");
-    
-    
-
-    std::ofstream normalizedAccelLogFile(directoryPath + "normalizedAccel.txt");
-    std::ofstream bumpCount(directoryPath + "bumpCount.txt");
-
-    std::ofstream iirFilterLogFile(directoryPath + "iirFilterLogFile.txt");
-    std::ofstream firFilterLogFile(directoryPath + "firFilterLogFile.txt");
-
-    std::ofstream meanLogFile(directoryPath + "meanLogFile.txt");
-    std::ofstream standartDeviationLogFile(directoryPath + "standartDeviationLogFile.txt");
-    std::ofstream varianceLogFile(directoryPath + "varianceLogFile.txt");
-
-    std::ofstream userInputLogFile(directoryPath + "userInputLogFile.txt");
-    
-    std::ofstream lowThresholdLogFile(directoryPath + "lowThresholdLogFile.txt");
-
-    std::ofstream allSensorDataLogFile(directoryPath + "allSensorDataLogFile.txt");
-    */
-
-    
-
-
-    /*
-    if (!sensorLogFile.is_open() || !compoundVectorLogFile.is_open() || !bumpCountLogFile.is_open() || !axLogFile.is_open() ||\
-     !inputForFilter.is_open() || !axFilteredLogFile.is_open() || !normalizedAccelLogFile.is_open() || !ayLogFile.is_open() ||\
-     !azLogFile.is_open() || !anglesLogFile.is_open()) {
-        std::cerr << "Error: Unable to open log files." << std::endl;
-        return -1;
-    }
-    */
-
 
     //Do not read the current yaw angle
     device.calc_yaw = false;
 
-    /*
-    MovingAverage<float> axMovingAvg(windowSizeMovingAverage);
-    MovingAverage<float> ayMovingAvg(windowSizeMovingAverage);
-    MovingAverage<float> azMovingAvg(windowSizeMovingAverage);
-    
-    MovingAverage<float> compoundAccelMovingAvg(windowSizeMovingAverage);
-
-    MovingAverage<float> rotatedAzMovingAvg(windowSizeMovingAverage);
-    */
-
-    
-
-    float pitchAngleComp{ 0.0f };
-    float rollAngleComp{ 0.0f };
+    float pitchAngle{ 0.0f };
+    float rollAngle{ 0.0f };
 
     float iirFilterOutput{ 0.0f };
 
@@ -324,47 +249,34 @@ int main(){
 
     float compoundAccelerationVector{ 0.0f };
 
-
-    queue q1, q2;
+    queue q1;
     detection detect;
 
     const int circularBufferSize{ 10 };
+
     init_queue(&q1, circularBufferSize);
-    init_queue(&q2, circularBufferSize);
-
     init_detection(&detect);
-
-    float mean{ 0.0f };
-    float std_dev{ 0.0f };
 
     std::vector<int> verticalLineIndices;
 
     while(true){
-        // Record loop time stamp
+        
+        // Record loop time stamp:
         auto startTime{std::chrono::high_resolution_clock::now()};
 
-        // Convert high_resolution_clock::time_point to system_clock::time_point
-        auto systemTimePoint = std::chrono::time_point_cast<std::chrono::system_clock::duration>(startTime - std::chrono::high_resolution_clock::now() + std::chrono::system_clock::now());
-
-        // Convert system_clock::time_point to std::time_t
-        std::time_t now = std::chrono::system_clock::to_time_t(systemTimePoint);
-
-        // Print the time
-        // std::cout << std::ctime(&now) << std::endl;
-
-
-        //Get the current accelerometer values
+        //Get the current accelerometer values:
         device.getAccel(&ax, &ay, &az);
-        //Get the current gyroscope values
+
+        //Get the current gyroscope values:
         device.getGyro(&gr, &gp, &gy);
 
-        //Get the current roll and pitch angles using complementary filter
-        complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngleComp, &pitchAngleComp);
+        // Get the current roll and pitch angles using complementary filter:
+        complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngle, &pitchAngle);
 
         // Rotation:
-        rotateAll(rollAngleComp*degreesToRadians, pitchAngleComp*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
+        rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
 
-        // First Order IIR and FIR Implementation:
+        // First Order IIR Filtering:
         iirFilterOutput = FirstOrderIIR_Update(&iirFilt, az_rotated);
 
         // Compount Acceleration Vector:
@@ -374,9 +286,8 @@ int main(){
 
         // Zeroing Implementation
         lowThresholdUpdate(&lowThresholdOutput, az_rotated);
-        //logData(lowThresholdLogFile, lowThresholdOutput);
 
-        // Change this for filter:
+        // Change this for filter of choice:
         enqueue(&q1, iirFilterOutput);
 
         if(queue_full(&q1)){
@@ -388,45 +299,7 @@ int main(){
                 logBump(bumpCountCircularBufferLogFile, &detect);
                 detect.bump_detected = false;
             }
-
-
-            /*
-            mean = calculate_mean(&q1);
-            std_dev = calculate_std_dev(&q1, mean);
-
-            if(q1.bump_detected){
-                std::cout << "Bump Detected at Sample: " << q1.samples_processed <<  " Count: " << q1.bump_counter << std::endl;
-                // Add the sample index to the vector
-                verticalLineIndices.push_back(q1.samples_processed);
-                //logBump(bumpCountCircularBufferLogFile, &q1);
-                q1.bump_detected = false;
-            }
-            
-            */
-            
-
-            //logData(meanLogFile, mean);
-            //logData(standartDeviationLogFile, std_dev);
-
         }
-
-        /*
-        enqueue(&q2, lowThresholdOutput);
-
-        if(queue_full(&q2)){
-
-            
-            if(q2.bump_detected){
-                std::cout << "Bump Detected at Sample: " << q2.samples_processed <<  " Count: " << q2.bump_counter << std::endl;
-                //logBump(bumpCountLowThresholdLogFile, &q2);
-                q2.bump_detected = false;
-            }
-            
-            
-        }
-        */
-        
-
 
         /*
 
@@ -504,8 +377,8 @@ int main(){
             << " AccX (rotated) (m/s^2): "         << std::setw(width) << ax_rotated << " | "
             << " AccY (rotated) (m/s^2): "         << std::setw(width) << ay_rotated << " | "
             << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
-            << " Roll Angle (deg): "               << std::setw(width) << rollAngleComp << " | "
-            << " Pitch Angle (deg): "              << std::setw(width) << pitchAngleComp << std::endl;
+            << " Roll Angle (deg): "               << std::setw(width) << rollAngle << " | "
+            << " Pitch Angle (deg): "              << std::setw(width) << pitchAngle << std::endl;
         */
         
         
@@ -517,9 +390,9 @@ int main(){
             << " AccY (m/s^2): "        << std::setw(width) << ay << " | "
             << " AccZ (m/s^2): "        << std::setw(width) << az << " | "
             << " Pitch Angle Formula: " << std::setw(width) << pitchAngleFormula << " | "
-            << " Pitch Angle Comp: "   << std::setw(width) << pitchAngleComp << " | "
+            << " Pitch Angle Comp: "   << std::setw(width) << pitchAngle << " | "
             << " Roll Angle Formula: " << std::setw(width) << rollAngleFormula << " | "
-            << " Roll Angle Comp: " << std::setw(width) << rollAngleComp << std::endl;
+            << " Roll Angle Comp: " << std::setw(width) << rollAngle << std::endl;
 
 
         */
@@ -568,7 +441,7 @@ int main(){
         
         // logData(firFilterLogFile, firFilterOutput); // az_rotated is filtered with FIR
 
-        //logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
+        //logAngles(anglesLogFile, rollAngle, pitchAngle);
         //logData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
 
@@ -582,18 +455,24 @@ int main(){
        
        
         // Check the button state
-        unsigned int state = digitalRead(buttonPin) == LOW ? 1 : 0;
-        // Log the button state
-        //logUser(userInputLogFile, state);
+        unsigned int buttonState = digitalRead(buttonPin) == LOW ? 1 : 0;
 
-        std::string logOut = "ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+",gr="+std::to_string(gr)+\
-                            ",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+",roll_angle="+std::to_string(rollAngleComp)+",pitch_angle="+\
-                            std::to_string(pitchAngleComp)+",ax_rotated="+std::to_string(ax_rotated)+",ay_rotated="+std::to_string(ay_rotated)+\
-        ",az_rotated="+std::to_string(az_rotated)+",iirOutput="+std::to_string(iirFilterOutput)+",comp_vector="+std::to_string(compoundAccelerationVector);
+        std::string logOut = ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+",gr="+std::to_string(gr)+\
+                            ",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+\
+                            std::to_string(pitchAngle)+",ax_rotated="+std::to_string(ax_rotated)+",ay_rotated="+std::to_string(ay_rotated)+\
+        ",az_rotated="+std::to_string(az_rotated)+",iirOutput="+std::to_string(iirFilterOutput)+",comp_vector="+std::to_string(compoundAccelerationVector)+\
+        ",button_state="+std::to_string(buttonState);
+
+        std::string logOutDataOnly = ","+std::to_string(ax)+","+std::to_string(ay)+","+std::to_string(az)+","+std::to_string(gr)+\
+                            ","+std::to_string(gp)+","+std::to_string(gy)+","+std::to_string(rollAngle)+","+\
+                            std::to_string(pitchAngle)+","+std::to_string(ax_rotated)+","+std::to_string(ay_rotated)+\
+                            ","+std::to_string(az_rotated)+","+std::to_string(iirFilterOutput)+","+std::to_string(compoundAccelerationVector)+\
+                            ","+std::to_string(buttonState);
 
         // TO BE CONTINUED...
 
-        TLogger::TLogInfo(directoryPath, fileName, logOut);
+        TLogger::TLogInfo(directoryPath, allSensorLogFile, logOut);
+        TLogger::TLogInfo(directoryPath, sensorLogFileWithoutText, logOutDataOnly);
 
 
 

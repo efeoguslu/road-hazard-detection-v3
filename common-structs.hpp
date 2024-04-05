@@ -26,7 +26,7 @@ namespace TLogger
     void writeToFile(const std::string& directoryPath, const std::string& filename, const std::string& message) {
         std::ofstream logFile(directoryPath + filename, std::ios::app); // Open the file in append mode
         if (logFile.is_open()) {
-            logFile << message << std::endl; // Write the message
+            logFile << message << std::endl; // Write the message                                       ! !!!//BUNU WRITETOFILE YAZAN YERLERE KOY. INIT ETMEYİ UNUTMA
             logFile.close(); // Close the file
         } else {
             std::cerr << "Unable to open file for writing: " << directoryPath + filename << std::endl;
