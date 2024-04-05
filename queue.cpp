@@ -39,60 +39,6 @@ float dequeue(queue *q){
     return result;
 }
 
-/*
-void apply_bump_detection(queue* q){
-
-    // Decrement the cooldown counter
-    if (q->cooldown_counter > 0) {
-        q->cooldown_counter--;
-        return; // Skip the rest of the function if we're in cooldown
-    }
-
-    float max_value = q->values[0];
-    float min_value = q->values[0];
-
-    int new_max_index = 0;
-    int new_min_index = 0;
-
-    for(int i = 0; i < q->num_entries; ++i){
-        if (q->values[i] > max_value) {
-            max_value = q->values[i];
-            new_max_index = i;
-        }
-        if (q->values[i] < min_value) {
-            min_value = q->values[i];
-            new_min_index = i;
-        }
-    }
-
-    float new_range = max_value - min_value;
-
-    if(!combinedToleranceCompare(new_range, q->previous_range)){
-
-        if(new_max_index != q->max_index && new_min_index != q->min_index){
-
-        q->max_index = new_max_index;
-        q->min_index = new_min_index;
-
-            if(std::abs(q->values[q->max_index] - q->values[q->min_index]) > range_threshold){
-                q->bump_counter++;
-                q->bump_detected = true;
-
-                // Set the cooldown counter to a value that represents the cooldown period
-                q->cooldown_counter = cooldown_samples;
-            }
-
-        }
-
-    }
-
-    // Update the previous range
-    q->previous_range = new_range;
-}
-*/
-
-
-
 bool enqueue(queue* q, float value){
     if(queue_full(q)){
         // If the queue is full, dequeue the oldest value first
@@ -102,16 +48,6 @@ bool enqueue(queue* q, float value){
     q->values[q->tail] = value;
     q->num_entries++;
     q->tail = (q->tail + 1) % q->size; // wrap around 0 at the end of array
-
-
-    /*
-        q->samples_processed++;
-
-    if(q->samples_processed > warm_up_samples){
-        apply_bump_detection(q);
-    }
-    */
-
 
     return true;
 }

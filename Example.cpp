@@ -124,9 +124,6 @@ float timeSync(auto t1){
 
 void complementaryFilter(float ax, float ay, float az, float gr, float gp, float gy, float* rollAngle, float* pitchAngle){
 
-    // clock_gettime(CLOCK_REALTIME, &device.start); //Read current time into start variable
-
-
 	//X (roll) axis
 	device._accel_angle[0] = atan2f(az, ay) * radiansToDegrees - 90.0f; //Calculate the angle with z and y convert to degrees and subtract 90 degrees to rotate
 	device._gyro_angle[0] = device._angle[0] + gr*dt; //Use roll axis (X axis)
@@ -173,11 +170,9 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
     *rollAngle = device._angle[0];
     *pitchAngle = device._angle[1];
 
-    // clock_gettime(CLOCK_REALTIME, &device.end); //Save time to end clock
-	// dt = (device.end.tv_sec - device.start.tv_sec) + (device.end.tv_nsec - device.start.tv_nsec) / 1e9; //Calculate new dt
-	// clock_gettime(CLOCK_REALTIME, &device.start); //Save time to start clock
-
 }
+
+/*
 void lowThresholdUpdate(float* output, float x){
     if(x >= 0.8f && x <= 1.19f){
         *output = 0.0f;
@@ -189,6 +184,8 @@ void lowThresholdUpdate(float* output, float x){
         *output = x - 1.0f; // This will return the same output for inputs larger than 1.2
     }
 }
+*/
+
 
 typedef struct{
     float ax, ay, az, gr, gp, gy;
@@ -285,7 +282,7 @@ int main(){
         //firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
 
         // Zeroing Implementation
-        lowThresholdUpdate(&lowThresholdOutput, az_rotated);
+        // lowThresholdUpdate(&lowThresholdOutput, az_rotated);
 
         // Change this for filter of choice:
         enqueue(&q1, iirFilterOutput);
