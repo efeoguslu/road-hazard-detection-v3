@@ -13,7 +13,6 @@
 #define QUEUE_EMPTY (INT_MIN)
 #define STACK_EMPTY (INT_MIN)
 
-#define COOLDOWN_SAMPLES (20)
 
 
 typedef struct{
@@ -21,12 +20,8 @@ typedef struct{
     int head, tail, num_entries, size;
 
     float previous_range;
-    int bump_counter;
     int min_index;
     int max_index;
-    int samples_processed;
-    bool bump_detected;
-    int cooldown_counter; // Track the number of samples to ignore after a bump
 } queue;
 
 

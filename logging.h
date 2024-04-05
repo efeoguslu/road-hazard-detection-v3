@@ -26,11 +26,12 @@ extern "C" {
 #include <unistd.h>
 
 #include "queue.h"
+#include "detection.h"
 
 void logData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy);
 void logData(std::ofstream &logfile, float data);
 void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGyroVector);
-void logBump(std::ofstream &logfile, queue* q);
+void logBump(std::ofstream &logfile, detection* detect);
 void logAngles(std::ofstream &logfile, float roll, float pitch);
 void logUser(std::ofstream &logfile, unsigned int state);
 

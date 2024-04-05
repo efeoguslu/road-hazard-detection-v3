@@ -19,6 +19,7 @@
 #include "filters.h"
 #include "queue.h"
 #include "gpio.h"
+#include "detection.h"
 
 #include "common-structs.hpp"
 
@@ -198,18 +199,6 @@ typedef struct{
 
 int main(){
 
-    /*
-    const std::string direc = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/";
-    const std::string filame = "mylog.txt";
-    const std::string loOut = "This is an info log message.";
-
-    TLogger::TLogInfo(direc, filame, loOut);
-
-    return 0;
-    */
-
-    
-
     // Initialize wiringPi and allow the use of BCM pin numbering
     wiringPiSetupGpio();
 
@@ -222,10 +211,8 @@ int main(){
     // Blink the LED 3 times with a delay of 0.1 second between each state change
     blink_led(ledPin, 3, 100);
 
-    // Initialize Filters
-    FirstOrderIIR_Init(&iirFilt, filterAlpha);
-    // FIRFilter_Init(&firFilt);
-    
+    // Initialize Filter
+    FirstOrderIIR_Init(&iirFilt, filterAlpha);    
 
     float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
     float ax_rotated, ay_rotated, az_rotated; // Variables to store the rotated acceleration
@@ -251,14 +238,14 @@ int main(){
     }
 
     // Input/Output Files:
-
+    std::ofstream bumpCountCircularBufferLogFile(directoryPath + "bumpCountCircularBufferLogFile.txt");
     /*
     std::ofstream sensorLogFile(directoryPath + "sensorLogFile.txt");
     std::ofstream compoundVectorLogFile(directoryPath + "compoundVectorLogFile.txt");
 
     std::ofstream bumpCountNaiveLogFile(directoryPath + "bumpCountNaiveLogFile.txt");
     std::ofstream bumpCountNaiveSquaredLogFile(directoryPath + "bumpCountNaiveSquaredLogFile.txt");
-    std::ofstream bumpCountCircularBufferLogFile(directoryPath + "bumpCountCircularBufferLogFile.txt");
+    
     std::ofstream bumpCountLowThresholdLogFile(directoryPath + "bumpCountLowThresholdLogFile.txt");
 
     std::ofstream axLogFile(directoryPath + "axLogFile.txt");
@@ -335,12 +322,17 @@ int main(){
 
     // float firFilterOutput{ 0.0f };
 
+    float compoundAccelerationVector{ 0.0f };
+
 
     queue q1, q2;
+    detection detect;
 
-    int circularBufferSize{ 10 };
+    const int circularBufferSize{ 10 };
     init_queue(&q1, circularBufferSize);
     init_queue(&q2, circularBufferSize);
+
+    init_detection(&detect);
 
     float mean{ 0.0f };
     float std_dev{ 0.0f };
@@ -375,6 +367,9 @@ int main(){
         // First Order IIR and FIR Implementation:
         iirFilterOutput = FirstOrderIIR_Update(&iirFilt, az_rotated);
 
+        // Compount Acceleration Vector:
+        compoundAccelerationVector = compoundVector(az_rotated, ay_rotated, az_rotated);
+
         //firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
 
         // Zeroing Implementation
@@ -385,6 +380,17 @@ int main(){
         enqueue(&q1, iirFilterOutput);
 
         if(queue_full(&q1)){
+
+            apply_detection(&detect, &q1);
+
+            if(detect.bump_detected){
+                std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
+                logBump(bumpCountCircularBufferLogFile, &detect);
+                detect.bump_detected = false;
+            }
+
+
+            /*
             mean = calculate_mean(&q1);
             std_dev = calculate_std_dev(&q1, mean);
 
@@ -395,21 +401,31 @@ int main(){
                 //logBump(bumpCountCircularBufferLogFile, &q1);
                 q1.bump_detected = false;
             }
+            
+            */
+            
 
             //logData(meanLogFile, mean);
             //logData(standartDeviationLogFile, std_dev);
 
         }
 
+        /*
         enqueue(&q2, lowThresholdOutput);
 
         if(queue_full(&q2)){
+
+            
             if(q2.bump_detected){
                 std::cout << "Bump Detected at Sample: " << q2.samples_processed <<  " Count: " << q2.bump_counter << std::endl;
                 //logBump(bumpCountLowThresholdLogFile, &q2);
                 q2.bump_detected = false;
             }
+            
+            
         }
+        */
+        
 
 
         /*
@@ -572,8 +588,8 @@ int main(){
 
         std::string logOut = "ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+",gr="+std::to_string(gr)+\
                             ",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+",roll_angle="+std::to_string(rollAngleComp)+",pitch_angle="+\
-                            std::to_string(pitchAngleComp)+"ax_rotated="+std::to_string(ax_rotated)+"ay_rotated="+std::to_string(ay_rotated)+\
-        "az_rotated="+std::to_string(az_rotated);
+                            std::to_string(pitchAngleComp)+",ax_rotated="+std::to_string(ax_rotated)+",ay_rotated="+std::to_string(ay_rotated)+\
+        ",az_rotated="+std::to_string(az_rotated)+",iirOutput="+std::to_string(iirFilterOutput)+",comp_vector="+std::to_string(compoundAccelerationVector);
 
         // TO BE CONTINUED...
 

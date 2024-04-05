@@ -11,7 +11,7 @@ LDFLAGS = -li2c -lwiringPi
 TARGET = Example
 
 # Define the source files
-SRCS = Example.cpp MPU6050.cpp logging.cpp filters.cpp queue.cpp gpio.cpp
+SRCS = Example.cpp MPU6050.cpp logging.cpp filters.cpp queue.cpp gpio.cpp detection.cpp
 
 # Define the object files
 OBJS = $(SRCS:.cpp=.o)

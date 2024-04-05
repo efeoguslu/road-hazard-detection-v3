@@ -68,7 +68,7 @@ void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGy
     }
 }
 
-void logBump(std::ofstream &logfile, queue* q){
+void logBump(std::ofstream &logfile, detection* detect){
     if(logfile.is_open()){
         // Get elapsed time in hours:minutes:seconds format
         std::string elapsed_time = getElapsedTime();
@@ -77,7 +77,7 @@ void logBump(std::ofstream &logfile, queue* q){
         logfile << elapsed_time << ", ";
 
         logfile << std::setprecision(6) << std::fixed; // Set precision for all subsequent data
-        logfile << q->samples_processed << ", " << q->bump_counter << std::endl;
+        logfile << detect->samples_processed << ", " << detect->bump_counter << std::endl;
     }
 }
 

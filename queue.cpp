@@ -1,13 +1,4 @@
 #include "queue.h"
-#include <algorithm> // For std::max
-
-bool combinedToleranceCompare(double x, double y) {
-    double maxXYOne = std::max({1.0, std::fabs(x), std::fabs(y)});
-    return std::fabs(x - y) <= std::numeric_limits<double>::epsilon() * maxXYOne;
-}
-
-constexpr float range_threshold{ 0.35f };
-constexpr int warm_up_samples{ 30 };
 
 void init_queue(queue* q, int max_size){
     q->size = max_size;
@@ -17,15 +8,10 @@ void init_queue(queue* q, int max_size){
     q->tail = 0;
 
     q->previous_range = 0.0f;
-    q->bump_counter = 0;
-
     q->min_index = 0;
     q->max_index = 0;
-
-    q->samples_processed = 0;
-    q->bump_detected = false;
-    q->cooldown_counter = 0; // Initialize cooldown_counter
 }
+
 
 bool queue_empty(queue* q){
     return(q->num_entries == 0);
@@ -53,6 +39,7 @@ float dequeue(queue *q){
     return result;
 }
 
+/*
 void apply_bump_detection(queue* q){
 
     // Decrement the cooldown counter
@@ -92,7 +79,7 @@ void apply_bump_detection(queue* q){
                 q->bump_detected = true;
 
                 // Set the cooldown counter to a value that represents the cooldown period
-                q->cooldown_counter = COOLDOWN_SAMPLES;
+                q->cooldown_counter = cooldown_samples;
             }
 
         }
@@ -102,6 +89,9 @@ void apply_bump_detection(queue* q){
     // Update the previous range
     q->previous_range = new_range;
 }
+*/
+
+
 
 bool enqueue(queue* q, float value){
     if(queue_full(q)){
@@ -114,15 +104,19 @@ bool enqueue(queue* q, float value){
     q->tail = (q->tail + 1) % q->size; // wrap around 0 at the end of array
 
 
-    q->samples_processed++;
+    /*
+        q->samples_processed++;
 
     if(q->samples_processed > warm_up_samples){
         apply_bump_detection(q);
     }
+    */
+
 
     return true;
 }
 
+// -------------------------------------------------------------------------------------
 
 
 float calculate_mean(queue* q) {
@@ -156,6 +150,8 @@ float calculate_variance(queue* q, float mean) {
 
 
 // -------------------------------------------------------------------------------------
+
+// NOT USED AT THE MOMENT:
 
 bool push(stack *mystack, int value){
 
