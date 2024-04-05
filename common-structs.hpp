@@ -1,40 +1,5 @@
 #include <sys/time.h>
-
-typedef struct 
-{
-    int32_t speed_data;
-    uint32_t rpm;
-    int32_t gear;
-} st_motor_data;
-
-typedef struct
-{
-    //celcius values with x100 magnificied
-    //value 1765 means 17.65 celcius degrees
-    int32_t indoor_temperature;
-    int32_t outdoor_temperature;
-
-}st_temperatures_data;
-
-typedef struct 
-{
-    //psi values with x100 magnificied
-    //value 3045 means 30.45 psi
-    union 
-    {
-        uint32_t pressures[4];
-        struct 
-        {
-            uint32_t p_front_left;
-            uint32_t p_front_right;
-            uint32_t p_rear_left;
-            uint32_t p_rear_right;
-        }named_;
-    }data_field;
-    
-}st_tire_pressures_data;
-
-
+#include <fstream>
 
 namespace TLogger
 {
@@ -46,9 +11,33 @@ namespace TLogger
 
     static bool start=true;
     static TLOGTYPE type = INFO;
+    static std::ofstream logFile; // Declare an ofstream object for the log file
+
+    // Function to initialize the log file
+    void initLogFile(const std::string& filename) {
+        logFile.open(filename, std::ofstream::out | std::ios::app);
+        if (!logFile.is_open()) {
+            std::cerr << "Failed to open log file: " << filename << std::endl;
+            exit(1); // Exit the program if the file cannot be opened
+        }
+    }
+
+    // Function to write log message to a file
+    void writeToFile(const std::string& directoryPath, const std::string& filename, const std::string& message) {
+        std::ofstream logFile(directoryPath + filename, std::ios::app); // Open the file in append mode
+        if (logFile.is_open()) {
+            logFile << message << std::endl; // Write the message
+            logFile.close(); // Close the file
+        } else {
+            std::cerr << "Unable to open file for writing: " << directoryPath + filename << std::endl;
+        }
+    }
+
+    
+
     void TLog()
     {
-        std::cout<<std::endl;
+        logFile << std::endl; // std::cout<<std::endl;
         start = true;
     }
 
@@ -56,7 +45,6 @@ namespace TLogger
     {
         struct timeval tv;
         gettimeofday(&tv,NULL);
-//        time_t now = time(0);      
         tm* ltm = localtime(&tv.tv_sec);  //can be changed to utc        
         char timeBuf[256];
         strftime(timeBuf,sizeof(timeBuf),"[%Y-%m-%d %H:%M:%S.",ltm);
@@ -97,12 +85,28 @@ namespace TLogger
         TLog(args...);
     }
 
+    // Specialization of TLogInfo for a single string argument
+    void TLogInfo(const std::string& directoryPath, const std::string& filename, const std::string& val) {
+        std::string message = prep_header() + val; // Prepare the log message
+        writeToFile(directoryPath, filename, message); // Write the message to the file
+    }
+
+    // Variadic template version of TLogInfo
     template<typename T, typename... Args>
+    void TLogInfo(const std::string& directoryPath, const std::string& filename, const T& val, Args&&... args) {
+        std::string message = prep_header() + std::to_string(val); // Prepare the log message
+        writeToFile(directoryPath, filename, message); // Write the message to the file
+        TLogInfo(directoryPath, filename, args...); // Continue with the rest of the arguments if any
+    }
+
+    /*
     void TLogInfo(const T & val, Args&&... args)
     {
         type=INFO;
         TLog(val,args...);
     }
+    */
+    
 
     template<typename T, typename... Args>
     void TLogWarn(const T & val, Args&&... args)

@@ -81,7 +81,7 @@ class MovingAverage {
 };
 
 // Function to get the current timestamp as a string
-std::string getCurrentTimestamp() {
+const std::string getCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
     std::time_t now_c = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
@@ -196,7 +196,20 @@ typedef struct{
     float ax, ay, az, gr, gp, gy;
 }sensorData;
 
-int main() {     
+int main(){
+
+    /*
+    const std::string direc = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/";
+    const std::string filame = "mylog.txt";
+    const std::string loOut = "This is an info log message.";
+
+    TLogger::TLogInfo(direc, filame, loOut);
+
+    return 0;
+    */
+
+    
+
     // Initialize wiringPi and allow the use of BCM pin numbering
     wiringPiSetupGpio();
 
@@ -222,8 +235,9 @@ int main() {
     sleep(1); // Wait for the system clock to get ready
 
 
-    auto timestamp = getCurrentTimestamp();
-    auto directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
+    const std::string timestamp = getCurrentTimestamp();
+    const std::string directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
+    const std::string fileName = "allSensorLogFile.txt";
     
     
     if (!createDirectory(directoryPath)) {
@@ -238,6 +252,7 @@ int main() {
 
     // Input/Output Files:
 
+    /*
     std::ofstream sensorLogFile(directoryPath + "sensorLogFile.txt");
     std::ofstream compoundVectorLogFile(directoryPath + "compoundVectorLogFile.txt");
 
@@ -283,6 +298,9 @@ int main() {
     std::ofstream lowThresholdLogFile(directoryPath + "lowThresholdLogFile.txt");
 
     std::ofstream allSensorDataLogFile(directoryPath + "allSensorDataLogFile.txt");
+    */
+
+    
 
 
     /*
@@ -361,7 +379,7 @@ int main() {
 
         // Zeroing Implementation
         lowThresholdUpdate(&lowThresholdOutput, az_rotated);
-        logData(lowThresholdLogFile, lowThresholdOutput);
+        //logData(lowThresholdLogFile, lowThresholdOutput);
 
         // Change this for filter:
         enqueue(&q1, iirFilterOutput);
@@ -374,12 +392,12 @@ int main() {
                 std::cout << "Bump Detected at Sample: " << q1.samples_processed <<  " Count: " << q1.bump_counter << std::endl;
                 // Add the sample index to the vector
                 verticalLineIndices.push_back(q1.samples_processed);
-                logBump(bumpCountCircularBufferLogFile, &q1);
+                //logBump(bumpCountCircularBufferLogFile, &q1);
                 q1.bump_detected = false;
             }
 
-            logData(meanLogFile, mean);
-            logData(standartDeviationLogFile, std_dev);
+            //logData(meanLogFile, mean);
+            //logData(standartDeviationLogFile, std_dev);
 
         }
 
@@ -388,7 +406,7 @@ int main() {
         if(queue_full(&q2)){
             if(q2.bump_detected){
                 std::cout << "Bump Detected at Sample: " << q2.samples_processed <<  " Count: " << q2.bump_counter << std::endl;
-                logBump(bumpCountLowThresholdLogFile, &q2);
+                //logBump(bumpCountLowThresholdLogFile, &q2);
                 q2.bump_detected = false;
             }
         }
@@ -529,13 +547,13 @@ int main() {
 
         
         
-        logData(rotatedAzLogFile, az_rotated);
-        logData(iirFilterLogFile, iirFilterOutput); // az_rotated is filtered with IIR 
+        //logData(rotatedAzLogFile, az_rotated);
+        //logData(iirFilterLogFile, iirFilterOutput); // az_rotated is filtered with IIR 
         
         // logData(firFilterLogFile, firFilterOutput); // az_rotated is filtered with FIR
 
-        logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
-        logData(sensorLogFile, ax, ay, az, gr, gp, gy);
+        //logAngles(anglesLogFile, rollAngleComp, pitchAngleComp);
+        //logData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
 
         /*
@@ -550,16 +568,16 @@ int main() {
         // Check the button state
         unsigned int state = digitalRead(buttonPin) == LOW ? 1 : 0;
         // Log the button state
-        logUser(userInputLogFile, state);
+        //logUser(userInputLogFile, state);
 
         std::string logOut = "ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+",gr="+std::to_string(gr)+\
                             ",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+",roll_angle="+std::to_string(rollAngleComp)+",pitch_angle="+\
                             std::to_string(pitchAngleComp)+"ax_rotated="+std::to_string(ax_rotated)+"ay_rotated="+std::to_string(ay_rotated)+\
         "az_rotated="+std::to_string(az_rotated);
 
-        // TO BE CONTINUED
+        // TO BE CONTINUED...
 
-        TLogger::TLogInfo(logOut);
+        TLogger::TLogInfo(directoryPath, fileName, logOut);
 
 
 
