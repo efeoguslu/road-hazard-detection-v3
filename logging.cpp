@@ -24,7 +24,7 @@ std::string getElapsedTime() {
     return elapsed_time.str();
 }
 
-
+/*
 void logData(std::ofstream &logfile, float ax, float ay, float az, float gr, float gp, float gy) {
     if (logfile.is_open()) {
         // Get elapsed time in hours:minutes:seconds format
@@ -67,6 +67,9 @@ void logData(std::ofstream &logfile, float compoundAccelVector, float compoundGy
         logfile << compoundAccelVector << "," << compoundGyroVector << std::endl;
     }
 }
+*/
+
+
 
 void logBump(std::ofstream &logfile, detection* detect){
     if(logfile.is_open()){
@@ -131,6 +134,7 @@ void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile) {
     }
 }
 
+/*
 // Function to create the .plt file
 bool createPlotScript(const std::string& directoryPath) {
     std::string plotScript = R"(
@@ -166,5 +170,7 @@ bool createPlotScript(const std::string& directoryPath) {
 
     return true;
 }
+*/
+
 
 

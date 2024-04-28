@@ -26,17 +26,17 @@
 
 MPU6050 device(0x68, false);
 
-const int sampleRateHz{ 75 };                  // Sample rate in Hz
+const int sampleRateHz{ 75 };                    // Sample rate in Hz
 const int loopDurationMs{ 1000 / sampleRateHz }; // Duration of each loop iteration in milliseconds
 
-const float gravity_mps2{ 9.80665f };
-const float tau{ 0.05f };
-const float radiansToDegrees{ 57.2957795f };
-const float degreesToRadians{ 0.0174532925f };
+const double gravity_mps2{ 9.80665 };
+const double tau{ 0.05 };
+const double radiansToDegrees{ 57.2957795 };
+const double degreesToRadians{ 0.0174532925 };
 
-float dt{ 0.0f };
+double dt{ 0.0 };
 
-const float filterAlpha{ 0.80f };
+const double filterAlpha{ 0.9 };
 
 // Define the pin we are going to use
 const int ledPin{ 17 }; // Example: GPIO 17
@@ -44,39 +44,11 @@ const int buttonPin{ 16 };
 
 // ----------------------------------------------------------------------------------------------
 
-FirstOrderIIR iirFilt;
-// FIRFilter firFilt;
+
+ThreeAxisIIR iirFiltAccel;
+ThreeAxisIIR iirFiltGyro;
 
 // ----------------------------------------------------------------------------------------------
-
-template<typename T>
-class MovingAverage {
-
-    private:
-        std::deque<T> buffer;
-        size_t windowSize;
-    
-    public:
-        MovingAverage(size_t size) : windowSize(size) {}
-
-        void updateAndLogMovingAverage(std::ofstream &logFile, T newValue) {
-            // Add the new value to the buffer
-            buffer.push_back(newValue);
-
-            // If the buffer size exceeds the window size, remove the oldest value
-            if (buffer.size() > windowSize) {
-                buffer.pop_front();
-            }
-
-            // Calculate the moving average based on the current buffer contents
-            double sum = std::accumulate(buffer.begin(), buffer.end(), 0.0);
-            double movingAvg = sum / buffer.size();
-
-            // Write the moving average to the output file
-            logFile << movingAvg << "\n";
-            logFile.flush(); // Flush the output buffer to ensure data is written immediately
-        }
-};
 
 // Function to get the current timestamp as a string
 const std::string getCurrentTimestamp() {
@@ -91,23 +63,23 @@ bool createDirectory(const std::string& path) {
     return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 }
 
-float compoundVector(float x, float y, float z){
+double compoundVector(double x, double y, double z){
     return std::sqrt(x*x + y*y + z*z);
 }
 
-void rotateAll(float rollAngle, float pitchAngle, float ax, float ay, float az, float* ax_rotated, float* ay_rotated, float* az_rotated){
+void rotateAll(double rollAngle, double pitchAngle, double x, double y, double z, double* x_rotated, double* y_rotated, double* z_rotated){
 
-    *ax_rotated =  ax*cosf(pitchAngle)                                      + az*sinf(pitchAngle);
-    *ay_rotated = -ax*sinf(pitchAngle)*sinf(rollAngle) + ay*cosf(rollAngle) + az*cosf(pitchAngle)*sinf(rollAngle);
-    *az_rotated = -ax*sinf(pitchAngle)*cosf(rollAngle) - ay*sinf(rollAngle) + az*cosf(rollAngle)*cosf(pitchAngle);  
+    *x_rotated =  x*std::cos(pitchAngle)                                             + z*std::sin(pitchAngle);
+    *y_rotated = -x*std::sin(pitchAngle)*std::sin(rollAngle) + y*std::cos(rollAngle) + z*std::cos(pitchAngle)*std::sin(rollAngle);
+    *z_rotated = -x*std::sin(pitchAngle)*std::cos(rollAngle) - y*std::sin(rollAngle) + z*std::cos(rollAngle)*std::cos(pitchAngle);  
 }
 
 // Time stabilization function
-float timeSync(auto t1){
+double timeSync(auto t1){
     // Find duration to sleep thread
     auto t2 = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    int time2Delay = duration.count(); // Convert to int for sleep_for
+    long int time2Delay = duration.count(); // Convert to int for sleep_for
 
     // Sleep thread
     std::this_thread::sleep_for(std::chrono::microseconds(loopDurationMs - time2Delay));
@@ -115,20 +87,20 @@ float timeSync(auto t1){
     // Calculate dt
     auto t3 = std::chrono::high_resolution_clock::now();
     auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t1);
-    dt = static_cast<float>(duration2.count()) * 1E-6; // Explicitly cast to float
+    dt = static_cast<double>(duration2.count()) * 1E-6; // Explicitly cast to float
 
     // Return dt and begin main loop again
     return dt;
 }
 
 
-void complementaryFilter(float ax, float ay, float az, float gr, float gp, float gy, float* rollAngle, float* pitchAngle){
+void complementaryFilter(double ax, double ay, double az, double gr, double gp, double gy, double* rollAngle, double* pitchAngle){
 
 	//X (roll) axis
-	device._accel_angle[0] = atan2f(az, ay) * radiansToDegrees - 90.0f; //Calculate the angle with z and y convert to degrees and subtract 90 degrees to rotate
+	device._accel_angle[0] = std::atan2(az, ay) * radiansToDegrees - 90.0; //Calculate the angle with z and y convert to degrees and subtract 90 degrees to rotate
 	device._gyro_angle[0] = device._angle[0] + gr*dt; //Use roll axis (X axis)
 	//Y (pitch) axis
-	device._accel_angle[1] = atan2f(az, ax) * radiansToDegrees - 90.0f; //Calculate the angle with z and x convert to degrees and subtract 90 degrees to rotate
+	device._accel_angle[1] = std::atan2(az, ax) * radiansToDegrees - 90.0; //Calculate the angle with z and x convert to degrees and subtract 90 degrees to rotate
 	device._gyro_angle[1] = device._angle[1] + gp*dt; //Use pitch axis (Y axis)
 	//Z (yaw) axis
 	if (device.calc_yaw) {
@@ -141,8 +113,8 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 		device._gyro_angle[2] = 0; //Set the yaw axis to zero (because the angle cannot be calculated with the accelerometer when vertical)
 		device._first_run = 0;
 	}
-	float asum = std::fabs(ax) + std::fabs(ay) + std::fabs(az); //Calculate the sum of the accelerations
-	float gsum = std::fabs(gr) + std::fabs(gp) + std::fabs(gy); //Calculate the sum of the gyro readings
+	double asum = std::fabs(ax) + std::fabs(ay) + std::fabs(az); //Calculate the sum of the accelerations
+	double gsum = std::fabs(gr) + std::fabs(gp) + std::fabs(gy); //Calculate the sum of the gyro readings
 	for (int i = 0; i <= 1; i++) { //Loop through roll and pitch axes
 		if (std::fabs(device._gyro_angle[i] - device._accel_angle[i]) > 5) { //Correct for very large drift (or incorrect measurment of gyroscope by longer loop time)
 			device._gyro_angle[i] = device._accel_angle[i];
@@ -172,26 +144,26 @@ void complementaryFilter(float ax, float ay, float az, float gr, float gp, float
 
 }
 
-/*
-void lowThresholdUpdate(float* output, float x){
-    if(x >= 0.8f && x <= 1.19f){
-        *output = 0.0f;
-    }
-    else if(x < 0.8f){
-        *output = x - 1.0f; // This will return a negative value for inputs smaller than 0.8
-    }
-    else{
-        *output = x - 1.0f; // This will return the same output for inputs larger than 1.2
+
+void AppendDeque(std::deque<double> &target, std::deque<double> source)
+{
+    for(long unsigned int i = 0; i < source.size(); i++)
+    {
+        target.push_back(source.at(i));
     }
 }
-*/
-
-
-typedef struct{
-    float ax, ay, az, gr, gp, gy;
-}sensorData;
 
 int main(){
+
+    // Initialize Active Filter
+    ActiveFilter actFilter;
+
+    // These parameters are subject to testing
+    actFilter.setWindowParameters(50, 35);
+    actFilter.setThreshold(0.5);
+
+    ThreeAxisIIR_Init(&iirFiltAccel, filterAlpha);
+    ThreeAxisIIR_Init(&iirFiltGyro, filterAlpha);
 
     // Initialize wiringPi and allow the use of BCM pin numbering
     wiringPiSetupGpio();
@@ -205,13 +177,28 @@ int main(){
     // Blink the LED 3 times with a delay of 0.1 second between each state change
     blink_led(ledPin, 3, 100);
 
-    // Initialize Filter
-    FirstOrderIIR_Init(&iirFilt, filterAlpha);    
+    // Variables to store the accel, gyro and angle values
+    double ax, ay, az;
+    double gr, gp, gy;
 
-    float ax, ay, az, gr, gp, gy;             // Variables to store the accel, gyro and angle values
-    float ax_rotated, ay_rotated, az_rotated; // Variables to store the rotated acceleration
+    // Variables to store the filtered/rotated acceleration values
+    double ax_filtered, ay_filtered, az_filtered;                         
+    double ax_rotated,  ay_rotated,  az_rotated;
 
-    float lowThresholdOutput;
+    // Variables to store the filtered/rotated gyroscope values
+    double gr_filtered, gp_filtered, gy_filtered;
+    double gr_rotated,  gp_rotated,  gy_rotated;
+
+    // Initialize output data, IIR output data and input data
+    std::deque<double> outData;
+    outData.clear();
+
+    std::deque<double> iirOutData;
+    iirOutData.clear();
+
+    std::deque<double> inputData;
+    inputData.clear();
+
 
     sleep(1); // Wait for the system clock to get ready
 
@@ -219,32 +206,20 @@ int main(){
     const std::string directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
     const std::string allSensorLogFile = "allSensorLogFile.txt";
     const std::string sensorLogFileWithoutText = "sensorLogFileWithoutText.txt";
-    
+    const std::string bumpCountLogFile = "bumpCountLogFile.txt";
     
     if (!createDirectory(directoryPath)) {
         std::cerr << "Error: Unable to create directory." << std::endl;
         return -1;
     }
 
-    if (!createPlotScript(directoryPath)) {
-        std::cerr << "Error: Unable to create plot script." << std::endl;
-        return -1;
-    }
-
-    // Input/Output Files:
-    std::ofstream bumpCountCircularBufferLogFile(directoryPath + "bumpCountCircularBufferLogFile.txt");
-
     //Do not read the current yaw angle
     device.calc_yaw = false;
 
-    float pitchAngle{ 0.0f };
-    float rollAngle{ 0.0f };
+    double pitchAngle{ 0.0 };
+    double rollAngle{ 0.0 };
 
-    float iirFilterOutput{ 0.0f };
-
-    // float firFilterOutput{ 0.0f };
-
-    float compoundAccelerationVector{ 0.0f };
+    double compoundAccelerationVector{ 0.0 };
 
     queue q1;
     detection detect;
@@ -254,37 +229,75 @@ int main(){
     init_queue(&q1, circularBufferSize);
     init_detection(&detect);
 
-    std::vector<int> verticalLineIndices;
-
     while(true){
         
         // Record loop time stamp:
-        auto startTime{std::chrono::high_resolution_clock::now()};
+        auto startTime{ std::chrono::high_resolution_clock::now() };
 
-        //Get the current accelerometer values:
+        // Get the current accelerometer values:
         device.getAccel(&ax, &ay, &az);
+        // Get the filtered accelerometer values:
+        ThreeAxisIIR_Update(&iirFiltAccel, ax, ay, az, &ax_filtered, &ay_filtered, &az_filtered);
 
-        //Get the current gyroscope values:
+        // Get the current gyroscope values:
         device.getGyro(&gr, &gp, &gy);
+        // Get the filtered gyroscope values:
+        ThreeAxisIIR_Update(&iirFiltGyro, gr, gp, gy, &gr_filtered, &gp_filtered, &gy_filtered);
 
         // Get the current roll and pitch angles using complementary filter:
-        complementaryFilter(ax, ay, az, gr, gp, gy, &rollAngle, &pitchAngle);
+        complementaryFilter(ax_filtered, ay_filtered, az_filtered, gr_filtered, gp_filtered, gy_filtered, &rollAngle, &pitchAngle);
 
         // Rotation:
-        rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, ax, ay, az, &ax_rotated, &ay_rotated, &az_rotated);
+        rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, ax_filtered, ay_filtered, az_filtered, &ax_rotated, &ay_rotated, &az_rotated);
+        rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, gr_filtered, gp_filtered, gy_filtered, &gr_rotated, &gp_rotated, &gy_rotated);
 
-        // First Order IIR Filtering:
-        iirFilterOutput = FirstOrderIIR_Update(&iirFilt, az_rotated);
-
-        // Compount Acceleration Vector:
+        // Calculate Rotated Compound Acceleration Vector:
         compoundAccelerationVector = compoundVector(az_rotated, ay_rotated, az_rotated);
+        
+        // Apply Active Filter:
+        actFilter.feedData(compoundAccelerationVector);
 
-        //firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
+        if(actFilter.getCompletedDataSize() > 0)
+        {
+            std::deque<double> completedData = actFilter.getCompletedData();
+            // AppendDeque(outData, completedData);
+            apply_detection(&detect, completedData);
+
+            // Check if a bump was detected
+            if(detect.bump_detected){
+                
+                    std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
+                    std::string bumpLog = ",sample=" + std::to_string(detect.samples_processed) + ",count=" + std::to_string(detect.bump_counter);
+                    TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+                    detect.bump_detected = false;
+            }
+
+        }
+        
+        
+
+        /*
+        // Check if a bump was detected
+        if(detect.bump_detected){
+                std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
+
+                std::string bumpLog = ",sample=" + std::to_string(detect.samples_processed) + ",count=" + std::to_string(detect.bump_counter);
+
+                TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+
+                detect.bump_detected = false;
+        }
+        */
+        
+
+        // firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
 
         // Zeroing Implementation
         // lowThresholdUpdate(&lowThresholdOutput, az_rotated);
 
         // Change this for filter of choice:
+
+        /*
         enqueue(&q1, iirFilterOutput);
 
         if(queue_full(&q1)){
@@ -297,6 +310,8 @@ int main(){
                 detect.bump_detected = false;
             }
         }
+        */
+        
 
         /*
 
@@ -321,18 +336,27 @@ int main(){
 
 
         /*
-
         std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
-
-
         std::cout 
-            << "AccX (m/s^2): "         << std::setw(8) << ax
-            << " AccY (m/s^2): "        << std::setw(8) << ay 
-            << " AccZ (m/s^2): "        << std::setw(8) << az
-            << " Roll Rate (deg/s): "   << std::setw(8) << gr
-            << " Pitch Rate (deg/s): "  << std::setw(8) << gp
-            << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
-        */
+            << "ax: "         << std::setw(8) << ax
+            << " ay: "        << std::setw(8) << ay 
+            << " az: "        << std::setw(8) << az
+            << " ax_filtered: "   << std::setw(8) << ax_filtered
+            << " ay_filtered: "   << std::setw(8) << ay_filtered
+            << " az_filtered: "   << std::setw(8) << az_filtered
+            << " ax_rotated: "   << std::setw(8) << ax_rotated
+            << " ay_rotated: "   << std::setw(8) << ay_rotated
+            << " az_rotated: "   << std::setw(8) << az_rotated
+            << " Roll Angle: "  << std::setw(8) << rollAngle
+            << " Pitch Angle: "    << std::setw(8) << pitchAngle << std::endl;
+        */    
+        
+         
+        
+        
+        
+        
+
 
         // -------------------------------------------------------------------------------------------------------------------------
 
@@ -362,7 +386,6 @@ int main(){
 
         // -------------------------------------------------------------------------------------------------------------------------
         
-        
         /*
         constexpr int width = 5;
 
@@ -377,6 +400,9 @@ int main(){
             << " Roll Angle (deg): "               << std::setw(width) << rollAngle << " | "
             << " Pitch Angle (deg): "              << std::setw(width) << pitchAngle << std::endl;
         */
+        
+        
+        
         
         
         /*
@@ -448,37 +474,62 @@ int main(){
         azMovingAvg.updateAndLogMovingAverage(azFilteredLogFile, az);
         rotatedAzMovingAvg.updateAndLogMovingAverage(rotatedAzFilteredLogFile, az_rotated); 
         */
-               
-       
+
        
         // Check the button state
         unsigned int buttonState = digitalRead(buttonPin) == LOW ? 1 : 0;
 
-        std::string logOut = ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+",gr="+std::to_string(gr)+\
-                            ",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+\
-                            std::to_string(pitchAngle)+",ax_rotated="+std::to_string(ax_rotated)+",ay_rotated="+std::to_string(ay_rotated)+\
-        ",az_rotated="+std::to_string(az_rotated)+",iirOutput="+std::to_string(iirFilterOutput)+",comp_vector="+std::to_string(compoundAccelerationVector)+\
-        ",button_state="+std::to_string(buttonState);
 
+        
+        std::string logOut = 
+        ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
+        ",ax_filtered="+std::to_string(ax_filtered)+",ay_filtered="+std::to_string(ay_filtered)+",az_filtered="+std::to_string(az_filtered)+\
+        ",ax_rotated="+std::to_string(ax_rotated)+",ay_rotated="+std::to_string(ay_rotated)+",az_rotated="+std::to_string(az_rotated)+\
+        ",gr="+std::to_string(gr)+",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+\
+        ",gr_filtered="+std::to_string(gr_filtered)+",gp_filtered="+std::to_string(gp_filtered)+",gy="+std::to_string(gy_filtered)+\
+        ",gr_rotated="+std::to_string(gr_rotated)+",gp_rotated="+std::to_string(gp_rotated)+",gy_rotated="+std::to_string(gy_rotated)+\
+        ",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+std::to_string(pitchAngle)+\
+        ",comp_vector="+std::to_string(compoundAccelerationVector)+\
+        ",button_state="+std::to_string(buttonState);
+        
+
+        
+
+
+        /*
         std::string logOutDataOnly = ","+std::to_string(ax)+","+std::to_string(ay)+","+std::to_string(az)+","+std::to_string(gr)+\
                             ","+std::to_string(gp)+","+std::to_string(gy)+","+std::to_string(rollAngle)+","+\
                             std::to_string(pitchAngle)+","+std::to_string(ax_rotated)+","+std::to_string(ay_rotated)+\
-                            ","+std::to_string(az_rotated)+","+std::to_string(iirFilterOutput)+","+std::to_string(compoundAccelerationVector)+\
+                            ","+std::to_string(az_rotated)+","+std::to_string(compoundAccelerationVector)+\
                             ","+std::to_string(buttonState);
+        */
+        
+        
+        
+        
+
+
+
+
 
         // TO BE CONTINUED...
 
         TLogger::TLogInfo(directoryPath, allSensorLogFile, logOut);
-        TLogger::TLogInfo(directoryPath, sensorLogFileWithoutText, logOutDataOnly);
+
+
+        
+        // TLogger::TLogInfo(directoryPath, sensorLogFileWithoutText, logOutDataOnly);
+
+
 
 
 
         // Calculate Loop Duration
 
-        auto endTime{std::chrono::high_resolution_clock::now()};
-        auto duration{std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count()};
+        auto endTime{ std::chrono::high_resolution_clock::now() };
+        auto duration{ std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count() };
 
-        auto delayMs{static_cast<long>(loopDurationMs - duration)};
+        auto delayMs{ static_cast<long>(loopDurationMs - duration)} ;
 
         if (delayMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));

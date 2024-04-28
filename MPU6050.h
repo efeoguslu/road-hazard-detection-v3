@@ -113,16 +113,16 @@ class MPU6050 {
 		/*
 		void _update();
 
-		float _accel_angle[3];
-		float _gyro_angle[3];
-		float _angle[3]; //Store all angles (accel roll, accel pitch, accel yaw, gyro roll, gyro pitch, gyro yaw, comb roll, comb pitch comb yaw)
+		double _accel_angle[3];
+		double _gyro_angle[3];
+		double _angle[3]; //Store all angles (accel roll, accel pitch, accel yaw, gyro roll, gyro pitch, gyro yaw, comb roll, comb pitch comb yaw)
 
-		// float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
+		// double ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
 
 		int MPU6050_addr;
 		int f_dev; //Device file
 
-		float dt; //Loop time (recalculated with each loop)
+		double dt; //Loop time (recalculated with each loop)
 
 		struct timespec start,end; //Create a time structure
 
@@ -135,16 +135,16 @@ class MPU6050 {
 
 		void _update();
 
-		float _accel_angle[3];
-		float _gyro_angle[3];
-		float _angle[3]; //Store all angles (accel roll, accel pitch, accel yaw, gyro roll, gyro pitch, gyro yaw, comb roll, comb pitch comb yaw)
+		double _accel_angle[3];
+		double _gyro_angle[3];
+		double _angle[3]; //Store all angles (accel roll, accel pitch, accel yaw, gyro roll, gyro pitch, gyro yaw, comb roll, comb pitch comb yaw)
 
-		// float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
+		// double ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
 
 		int MPU6050_addr;
 		int f_dev; //Device file
 
-		float dt; //Loop time (recalculated with each loop)
+		double dt; //Loop time (recalculated with each loop)
 
 		struct timespec start,end; //Create a time structure
 
@@ -153,14 +153,14 @@ class MPU6050 {
 
 
 		//void _update();
-		float ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
+		double ax, ay, az, gr, gp, gy; //Temporary storage variables used in _update()
 		MPU6050(int8_t addr);
 		MPU6050(int8_t addr, bool run_update_thread);
-		void getAccelRaw(float *x, float *y, float *z);
-		void getGyroRaw(float *roll, float *pitch, float *yaw);
-		void getAccel(float *x, float *y, float *z);
-		void getGyro(float *roll, float *pitch, float *yaw);
-		void getOffsets(float *ax_off, float *ay_off, float *az_off, float *gr_off, float *gp_off, float *gy_off);
-		int getAngle(int axis, float *result);
+		void getAccelRaw(double *x, double *y, double *z);
+		void getGyroRaw(double *roll, double *pitch, double *yaw);
+		void getAccel(double *x, double *y, double *z);
+		void getGyro(double *roll, double *pitch, double *yaw);
+		void getOffsets(double *ax_off, double *ay_off, double *az_off, double *gr_off, double *gp_off, double *gy_off);
+		int getAngle(int axis, double *result);
 		bool calc_yaw;
 };

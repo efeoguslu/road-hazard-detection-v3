@@ -3,43 +3,102 @@
 
 #include <cstdint>
 #include <vector>
+#include <deque>
+#include <iostream>
+#include <fstream>
 
 #define FIR_FILTER_LENGTH (39)
 
 typedef struct{
-    float alpha;
-    float out;
+    double alpha;
+    double out;
 } FirstOrderIIR;
 
-void FirstOrderIIR_Init(FirstOrderIIR *filt, float alpha);
-float FirstOrderIIR_Update(FirstOrderIIR *filt, float in);
+typedef struct {
+    FirstOrderIIR x;
+    FirstOrderIIR y;
+    FirstOrderIIR z;
+} ThreeAxisIIR;
+
+void FirstOrderIIR_Init(FirstOrderIIR *filt, double alpha);
+double FirstOrderIIR_Update(FirstOrderIIR *filt, double in);
+void ThreeAxisIIR_Init(ThreeAxisIIR *filt, double alpha);
+
+void ThreeAxisIIR_Update(ThreeAxisIIR *filt, double in_x, double in_y, double in_z, double *out_x, double *out_y, double *out_z);
 
 
 // -------------------------------------------------------------------------------------------------------------------------
 
+/*
 typedef struct{
-    float alpha;
-    float out;
+    double alpha;
+    double out;
 } IFX_EMA;
 
 
-void IFX_EMA_Init(IFX_EMA *filt, float alpha);
-void IFX_EMA_SetAlpha(IFX_EMA *filt, float alpha);
-float IFX_EMA_Update(IFX_EMA *filt, float in);
+void IFX_EMA_Init(IFX_EMA *filt, double alpha);
+void IFX_EMA_SetAlpha(IFX_EMA *filt, double alpha);
+double IFX_EMA_Update(IFX_EMA *filt, double in);
+*/
+
 
 // -------------------------------------------------------------------------------------------------------------------------
 
+/*
 typedef struct{
-    float buf[FIR_FILTER_LENGTH]; // circular buffer
+    double buf[FIR_FILTER_LENGTH]; // circular buffer
     uint8_t bufIndex;
-    float out;
+    double out;
 }FIRFilter;
 
 void FIRFilter_Init(FIRFilter *fir);
-float FIRFilter_Update(FIRFilter *fir, float inp);
+double FIRFilter_Update(FIRFilter *fir, double inp);
+*/
+
 
 double movingAverage(const std::vector<double>& data, int windowSize);
 
+// -------------------------------------------------------------------------------------------------------------------------
 
+class ActiveFilter
+{    
+private:
+    /* data */
+    int m_windowSize;
+    int m_overlapSize;
+    int m_diffSize;
+
+    // https://stackoverflow.com/questions/5563952/why-there-is-no-pop-front-method-in-c-stdvector
+    // http://adrinael.net/containerchoice 
+
+    double m_posCoef     = 1.2; // was 1.4 before, but 1.2 was written in Python analysis
+    double m_negCoef     = 0.4;
+    double m_threshold   = 0.5; // was 0.15 before, 0.5 is more suitable after analysis
+    double m_offset      = 1.0;      //signal offset
+    bool  m_dataInit    = false;
+    std::deque<double> m_data;  //size: windowSize
+    std::deque<double> m_newData; // size: windowSize-overlapSize
+    std::deque<double> m_completedData; // completed data , no more operations will be done on there
+
+    // |_______||__overlap___||__newdata__|
+    // |---------window-------|
+    //          |---------new-window------|
+    
+public:
+    ActiveFilter(/* args */);
+    ~ActiveFilter();
+    void                setWindowParameters(int windowSize, int overlapSize);
+    void                setThreshold(double threshold);
+    void                setOffset(double offset);
+    void                feedData(double data);
+    int                 getCompletedDataSize();
+    std::deque<double>  getCompletedData();     // maybe return can be changed as vector / queue 
+
+private:
+    void                initMembers();
+    void                doCalculation();
+    double              getMaxValue();
+    double              getMinValue();
+};
 
 #endif // FILTERS_H

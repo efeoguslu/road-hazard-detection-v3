@@ -14,7 +14,7 @@ void init_detection(detection* detect){
     detect->bump_counter = 0;
 }
 
-void apply_detection(detection* detect, queue* q){
+void apply_detection(detection* detect, std::deque<double>& data){
 
     detect->samples_processed++;
 
@@ -26,45 +26,22 @@ void apply_detection(detection* detect, queue* q){
             return; // Skip the rest of the function if we're in cooldown
         }
 
-        float max_value = q->values[0];
-        float min_value = q->values[0];
+        // Find the maximum and minimum values in the deque
+        auto max_value_iter = std::max_element(data.begin(), data.end());
+        auto min_value_iter = std::min_element(data.begin(), data.end());
 
-        int new_max_index = 0;
-        int new_min_index = 0;
+        double max_value = *max_value_iter;
+        double min_value = *min_value_iter;
 
-        for(int i = 0; i < q->num_entries; ++i){
-            if (q->values[i] > max_value) {
-                max_value = q->values[i];
-                new_max_index = i;
-            }
-            if (q->values[i] < min_value) {
-                min_value = q->values[i];
-                new_min_index = i;
-            }
+        // Calculate the new range
+        // double new_range = max_value - min_value;
+
+        if(std::abs(max_value - min_value) > range_threshold){
+            detect->bump_counter++;
+            detect->bump_detected = true;
+
+            // Set the cooldown counter to a value that represents the cooldown period
+            detect->cooldown_counter = cooldown_samples;
         }
-
-        float new_range = max_value - min_value;
-
-        if(!combinedToleranceCompare(new_range, q->previous_range)){
-
-            if(new_max_index != q->max_index && new_min_index != q->min_index){
-
-            q->max_index = new_max_index;
-            q->min_index = new_min_index;
-
-                if(std::abs(q->values[q->max_index] - q->values[q->min_index]) > range_threshold){
-                    detect->bump_counter++;
-                    detect->bump_detected = true;
-
-                    // Set the cooldown counter to a value that represents the cooldown period
-                    detect->cooldown_counter = cooldown_samples;
-                }
-
-            }
-
-        }
-
-        // Update the previous range
-        q->previous_range = new_range;
-        }
+    }
 }
