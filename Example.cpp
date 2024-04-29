@@ -153,6 +153,30 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
     }
 }
 
+static int activeCount = 0;
+
+int detectBump(const std::deque<double>& completedData, double threshold) {
+    if (completedData.empty()) {
+        return -1; // Return -1 if the deque is empty
+    }
+
+    // Find the maximum and minimum values in the deque
+    auto maxEle = std::max_element(completedData.begin(), completedData.end());
+    auto minEle = std::min_element(completedData.begin(), completedData.end());
+
+    // Calculate the absolute difference between the max and min values
+    double diff = std::abs(*maxEle - *minEle);
+
+    // Check if the difference exceeds the threshold
+    if (diff > threshold) {
+        // If a bump is detected, return the sample number
+        // Assuming the sample number is the size of the deque
+        return completedData.size();
+    }
+
+    return -1; // Return -1 if no bump is detected
+}
+
 int main(){
 
     // Initialize Active Filter
@@ -229,6 +253,10 @@ int main(){
     init_queue(&q1, circularBufferSize);
     init_detection(&detect);
 
+
+    double threshold = 0.1; // Example threshold value
+    int sampleNumber = 0;
+
     while(true){
         
         // Record loop time stamp:
@@ -257,23 +285,38 @@ int main(){
         // Apply Active Filter:
         actFilter.feedData(compoundAccelerationVector);
 
+        /*
         if(actFilter.getCompletedDataSize() > 0)
         {
             std::deque<double> completedData = actFilter.getCompletedData();
-            // AppendDeque(outData, completedData);
             apply_detection(&detect, completedData);
 
-            // Check if a bump was detected
-            if(detect.bump_detected){
-                
-                    std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
-                    std::string bumpLog = ",sample=" + std::to_string(detect.samples_processed) + ",count=" + std::to_string(detect.bump_counter);
-                    TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
-                    detect.bump_detected = false;
-            }
-
+            std::cout << detect.samples_processed << std::endl;
         }
+
+        // Check if a bump was detected
+        if(detect.bump_detected){
+                std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
+                std::string bumpLog = ",sample=" + std::to_string(detect.samples_processed) + ",count=" + std::to_string(detect.bump_counter);
+                TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+                detect.bump_detected = false;
+        }
+        */
         
+        
+        std::deque<double> completedData = actFilter.getCompletedData();
+
+        int bumpSampleNumber = detectBump(completedData, threshold);
+        if (bumpSampleNumber != -1) {
+            ++activeCount;
+            std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
+            std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
+            TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+        }
+
+        // Increment the sample number for the next iteration
+        sampleNumber++;
+
         
 
         /*
