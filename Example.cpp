@@ -254,8 +254,14 @@ int main(){
     init_detection(&detect);
 
 
-    double threshold = 0.1; // Example threshold value
-    int sampleNumber = 0;
+    double threshold{ 0.1 }; // Example threshold value
+    int sampleNumber{ 0 };
+
+    // outData deque size is fixed value for now:
+    unsigned int wholeDequeSize{ 200 };
+
+    // Initialization of number of samples to be removed:
+    unsigned int removeSamples{ 0 };
 
     while(true){
         
@@ -285,76 +291,31 @@ int main(){
         // Apply Active Filter:
         actFilter.feedData(compoundAccelerationVector);
 
-        /*
-        if(actFilter.getCompletedDataSize() > 0)
-        {
+        if(actFilter.getCompletedDataSize() > 0){
             std::deque<double> completedData = actFilter.getCompletedData();
-            apply_detection(&detect, completedData);
-
-            std::cout << detect.samples_processed << std::endl;
+            AppendDeque(outData, completedData);
         }
-
-        // Check if a bump was detected
-        if(detect.bump_detected){
-                std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
-                std::string bumpLog = ",sample=" + std::to_string(detect.samples_processed) + ",count=" + std::to_string(detect.bump_counter);
-                TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
-                detect.bump_detected = false;
+        
+        if(outData.size() <= wholeDequeSize){
+            continue;
         }
-        */
         
+        removeSamples = outData.size() - wholeDequeSize;
+        outData.erase(outData.begin(), outData.begin() + removeSamples);
         
-        std::deque<double> completedData = actFilter.getCompletedData();
-
-        int bumpSampleNumber = detectBump(completedData, threshold);
+        int bumpSampleNumber = detectBump(outData, threshold);
         if (bumpSampleNumber != -1) {
             ++activeCount;
             std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
             std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
             TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
         }
-
         // Increment the sample number for the next iteration
         sampleNumber++;
+        
 
         
 
-        /*
-        // Check if a bump was detected
-        if(detect.bump_detected){
-                std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
-
-                std::string bumpLog = ",sample=" + std::to_string(detect.samples_processed) + ",count=" + std::to_string(detect.bump_counter);
-
-                TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
-
-                detect.bump_detected = false;
-        }
-        */
-        
-
-        // firFilterOutput = FIRFilter_Update(&firFilt, az_rotated);
-
-        // Zeroing Implementation
-        // lowThresholdUpdate(&lowThresholdOutput, az_rotated);
-
-        // Change this for filter of choice:
-
-        /*
-        enqueue(&q1, iirFilterOutput);
-
-        if(queue_full(&q1)){
-
-            apply_detection(&detect, &q1);
-
-            if(detect.bump_detected){
-                std::cout << "Bump Detected at Sample: " << detect.samples_processed <<  " Count: " << detect.bump_counter << std::endl;
-                logBump(bumpCountCircularBufferLogFile, &detect);
-                detect.bump_detected = false;
-            }
-        }
-        */
-        
 
         /*
 
@@ -394,13 +355,6 @@ int main(){
             << " Pitch Angle: "    << std::setw(8) << pitchAngle << std::endl;
         */    
         
-         
-        
-        
-        
-        
-
-
         // -------------------------------------------------------------------------------------------------------------------------
 
         /*
@@ -522,8 +476,6 @@ int main(){
         // Check the button state
         unsigned int buttonState = digitalRead(buttonPin) == LOW ? 1 : 0;
 
-
-        
         std::string logOut = 
         ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
         ",ax_filtered="+std::to_string(ax_filtered)+",ay_filtered="+std::to_string(ay_filtered)+",az_filtered="+std::to_string(az_filtered)+\
