@@ -155,10 +155,13 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
 
 static int activeCount = 0;
 
-int detectBump(const std::deque<double>& completedData, double threshold) {
-    if (completedData.empty()) {
-        return -1; // Return -1 if the deque is empty
+bool detectBump(const std::deque<double>& completedData, double threshold){
+
+    if (completedData.size() < 3) {
+        return false; // Not enough data points to detect a peak
     }
+
+    bool isPeak{ false };
 
     // Find the maximum and minimum values in the deque
     auto maxEle = std::max_element(completedData.begin(), completedData.end());
@@ -167,14 +170,20 @@ int detectBump(const std::deque<double>& completedData, double threshold) {
     // Calculate the absolute difference between the max and min values
     double diff = std::abs(*maxEle - *minEle);
 
-    // Check if the difference exceeds the threshold
-    if (diff > threshold) {
-        // If a bump is detected, return the sample number
-        // Assuming the sample number is the size of the deque
-        return completedData.size();
+
+    for (size_t i = 1; i < completedData.size() - 1; ++i) {
+        // Check if the current data point is greater than both its adjacent points
+        if (completedData[i] > completedData[i - 1] && completedData[i] > completedData[i + 1]) {
+            isPeak = true;
+        }
     }
 
-    return -1; // Return -1 if no bump is detected
+    // Check if the difference exceeds the threshold
+    if ((diff > threshold) && isPeak) {
+        return true;
+    }
+
+    return false; // Return false if no bump is detected
 }
 
 int main(){
@@ -184,7 +193,7 @@ int main(){
 
     // These parameters are subject to testing
     actFilter.setWindowParameters(50, 35);
-    actFilter.setThreshold(0.5);
+    actFilter.setThreshold(0.25);
 
     ThreeAxisIIR_Init(&iirFiltAccel, filterAlpha);
     ThreeAxisIIR_Init(&iirFiltGyro, filterAlpha);
@@ -213,23 +222,15 @@ int main(){
     double gr_filtered, gp_filtered, gy_filtered;
     double gr_rotated,  gp_rotated,  gy_rotated;
 
-    // Initialize output data, IIR output data and input data
+    // Initialize output deque
     std::deque<double> outData;
     outData.clear();
-
-    std::deque<double> iirOutData;
-    iirOutData.clear();
-
-    std::deque<double> inputData;
-    inputData.clear();
-
 
     sleep(1); // Wait for the system clock to get ready
 
     const std::string timestamp = getCurrentTimestamp();
     const std::string directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
     const std::string allSensorLogFile = "allSensorLogFile.txt";
-    const std::string sensorLogFileWithoutText = "sensorLogFileWithoutText.txt";
     const std::string bumpCountLogFile = "bumpCountLogFile.txt";
     
     if (!createDirectory(directoryPath)) {
@@ -245,16 +246,7 @@ int main(){
 
     double compoundAccelerationVector{ 0.0 };
 
-    queue q1;
-    detection detect;
-
-    const int circularBufferSize{ 10 };
-
-    init_queue(&q1, circularBufferSize);
-    init_detection(&detect);
-
-
-    double threshold{ 0.1 }; // Example threshold value
+    double threshold{ 0.5 }; // Example threshold value
     int sampleNumber{ 0 };
 
     // outData deque size is fixed value for now:
@@ -264,7 +256,6 @@ int main(){
     unsigned int removeSamples{ 0 };
 
     while(true){
-        
         // Record loop time stamp:
         auto startTime{ std::chrono::high_resolution_clock::now() };
 
@@ -293,28 +284,24 @@ int main(){
 
         if(actFilter.getCompletedDataSize() > 0){
             std::deque<double> completedData = actFilter.getCompletedData();
-            AppendDeque(outData, completedData);
+            AppendDeque(outData, completedData);        
         }
-        
-        if(outData.size() <= wholeDequeSize){
-            continue;
-        }
-        
-        removeSamples = outData.size() - wholeDequeSize;
-        outData.erase(outData.begin(), outData.begin() + removeSamples);
-        
-        int bumpSampleNumber = detectBump(outData, threshold);
-        if (bumpSampleNumber != -1) {
-            ++activeCount;
-            std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
-            std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
-            TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
-        }
+
         // Increment the sample number for the next iteration
         sampleNumber++;
-        
 
-        
+        if(!(outData.size() <= wholeDequeSize)){
+
+            removeSamples = static_cast<unsigned int>(outData.size() - wholeDequeSize);
+            outData.erase(outData.begin(), outData.begin() + removeSamples);
+            
+            if (detectBump(outData, threshold)) {
+                ++activeCount;
+                std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
+                std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
+                TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+            }
+        }
 
 
         /*
@@ -487,42 +474,15 @@ int main(){
         ",comp_vector="+std::to_string(compoundAccelerationVector)+\
         ",button_state="+std::to_string(buttonState);
         
-
-        
-
-
-        /*
-        std::string logOutDataOnly = ","+std::to_string(ax)+","+std::to_string(ay)+","+std::to_string(az)+","+std::to_string(gr)+\
-                            ","+std::to_string(gp)+","+std::to_string(gy)+","+std::to_string(rollAngle)+","+\
-                            std::to_string(pitchAngle)+","+std::to_string(ax_rotated)+","+std::to_string(ay_rotated)+\
-                            ","+std::to_string(az_rotated)+","+std::to_string(compoundAccelerationVector)+\
-                            ","+std::to_string(buttonState);
-        */
-        
-        
-        
-        
-
-
-
-
-
-        // TO BE CONTINUED...
-
         TLogger::TLogInfo(directoryPath, allSensorLogFile, logOut);
-
-
-        
-        // TLogger::TLogInfo(directoryPath, sensorLogFileWithoutText, logOutDataOnly);
-
-
-
 
 
         // Calculate Loop Duration
 
         auto endTime{ std::chrono::high_resolution_clock::now() };
         auto duration{ std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count() };
+
+        // std::cout << duration << std::endl;
 
         auto delayMs{ static_cast<long>(loopDurationMs - duration)} ;
 
