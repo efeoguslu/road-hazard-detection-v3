@@ -41,6 +41,7 @@ const double filterAlpha{ 0.9 };
 // Define the pin we are going to use
 const int ledPin{ 17 }; // Example: GPIO 17
 const int buttonPin{ 16 };
+// const int detectLedPin{ 26 };
 
 
 static int activeCount = 0;
@@ -159,7 +160,7 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
 
 bool detectBump(const std::deque<double>& completedData, double threshold){
 
-    if (completedData.size() < 3) {
+    if (completedData.size() < 3){
         return false; // Not enough data points to detect a peak
     }
 
@@ -170,17 +171,17 @@ bool detectBump(const std::deque<double>& completedData, double threshold){
     // Calculate the absolute difference between the max and min values
     double diff{ std::abs(*maxEle - *minEle) };
 
-    bool isPeak{ false };
+    bool isPeak{ false }; 
 
     for (size_t i = 1; i < completedData.size() - 1; ++i) {
         // Check if the current data point is greater than both its adjacent points
-        if ((completedData[i] > completedData[i - 1]) && (completedData[i] > completedData[i + 1])) {
+        if ((completedData[i] > completedData[i - 1]) && (completedData[i] > completedData[i + 1])){
             isPeak = true;
         }
     }
 
-    // Check if the difference exceeds the threshold
-    if ((diff > threshold) && isPeak) {
+    // Check if the difference exceeds the threshold and if it is peak
+    if ((diff > threshold) && isPeak){
         return true;
     }
 
@@ -204,12 +205,13 @@ int main(){
 
     // Setup the pin as output
     pinMode(ledPin, OUTPUT);
+    // pinMode(detectLedPin, OUTPUT);
 
     // Configure the pin as input
     pinMode(buttonPin, INPUT); 
 
     // Blink the LED 3 times with a delay of 0.1 second between each state change
-    blink_led(ledPin, 3, 100);
+    // blink_led(ledPin, 3, 100);
 
     // Variables to store the accel, gyro and angle values
     double ax, ay, az;
@@ -220,9 +222,9 @@ int main(){
     double ax_rotated,  ay_rotated,  az_rotated;
 
     // Variables to store the filtered/rotated gyroscope values
+
     double gr_filtered, gp_filtered, gy_filtered;
     double gr_rotated,  gp_rotated,  gy_rotated;
-
 
     // Initialize output deque
     std::deque<double> outData;
@@ -239,6 +241,15 @@ int main(){
         std::cerr << "Error: Unable to create directory." << std::endl;
         return -1;
     }
+
+    std::ofstream directoryPathFile("/home/efeoguslu/Desktop/directory_path.txt");
+
+    if (directoryPathFile.is_open()) {
+        directoryPathFile << directoryPath;
+        directoryPathFile.close();
+    } else {
+        std::cout << "Unable to open file for writing." << std::endl;
+    }
     
     //Do not read the current yaw angle
     device.calc_yaw = false;
@@ -252,15 +263,20 @@ int main(){
     int sampleNumber{ 0 };
 
     // outData deque size is fixed value for now:
-    unsigned int wholeDequeSize{ 200 };
+    unsigned int wholeDequeSize{ 150 };
 
     // Initialization of number of samples to be removed:
     unsigned int removeSamples{ 0 };
 
+    bool bumpDetected{ false };
+
+
+    digitalWrite(ledPin, LOW);
+
     while(true){
         // Record loop time stamp:
         auto startTime{ std::chrono::high_resolution_clock::now() };
-
+        
         // Get the current accelerometer values:
         device.getAccel(&ax, &ay, &az);
         // Get the filtered accelerometer values:
@@ -292,18 +308,31 @@ int main(){
         // Increment the sample number for the next iteration
         sampleNumber++;
 
-        if(!(outData.size() <= wholeDequeSize)){
+
+        if(outData.size() > wholeDequeSize){
 
             removeSamples = static_cast<unsigned int>(outData.size() - wholeDequeSize);
             outData.erase(outData.begin(), outData.begin() + removeSamples);
+
             
-            if (detectBump(outData, threshold)) {
+            if((sampleNumber % wholeDequeSize) == 0){
+                bumpDetected = false;
+                digitalWrite(ledPin, LOW);
+
+            }
+            
+            
+            if (!bumpDetected && detectBump(outData, threshold)) { 
+                bumpDetected = true;
+                digitalWrite(ledPin, HIGH);
                 ++activeCount;
                 std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
                 std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
                 TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
             }
         }
+
+        
 
 
         /*
@@ -327,7 +356,6 @@ int main(){
         //std::cout << "Time: " << timestamp << " Accel: " << ax << ", Y: " << ay << ", Z: " << az << " Bump Counter: " << bumpCounter << "\n"; 
 
 
-
         /*
         std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
         std::cout 
@@ -342,7 +370,10 @@ int main(){
             << " az_rotated: "   << std::setw(8) << az_rotated
             << " Roll Angle: "  << std::setw(8) << rollAngle
             << " Pitch Angle: "    << std::setw(8) << pitchAngle << std::endl;
-        */    
+        */
+        
+        
+           
         
         // -------------------------------------------------------------------------------------------------------------------------
 
