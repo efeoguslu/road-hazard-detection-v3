@@ -42,6 +42,9 @@ const double filterAlpha{ 0.9 };
 const int ledPin{ 17 }; // Example: GPIO 17
 const int buttonPin{ 16 };
 
+
+static int activeCount = 0;
+
 // ----------------------------------------------------------------------------------------------
 
 
@@ -153,7 +156,6 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
     }
 }
 
-static int activeCount = 0;
 
 bool detectBump(const std::deque<double>& completedData, double threshold){
 
@@ -161,19 +163,18 @@ bool detectBump(const std::deque<double>& completedData, double threshold){
         return false; // Not enough data points to detect a peak
     }
 
-    bool isPeak{ false };
-
     // Find the maximum and minimum values in the deque
     auto maxEle = std::max_element(completedData.begin(), completedData.end());
     auto minEle = std::min_element(completedData.begin(), completedData.end());
 
     // Calculate the absolute difference between the max and min values
-    double diff = std::abs(*maxEle - *minEle);
+    double diff{ std::abs(*maxEle - *minEle) };
 
+    bool isPeak{ false };
 
     for (size_t i = 1; i < completedData.size() - 1; ++i) {
         // Check if the current data point is greater than both its adjacent points
-        if (completedData[i] > completedData[i - 1] && completedData[i] > completedData[i + 1]) {
+        if ((completedData[i] > completedData[i - 1]) && (completedData[i] > completedData[i + 1])) {
             isPeak = true;
         }
     }
@@ -193,7 +194,7 @@ int main(){
 
     // These parameters are subject to testing
     actFilter.setWindowParameters(50, 35);
-    actFilter.setThreshold(0.25);
+    actFilter.setThreshold(0.25); // was 0.25 before
 
     ThreeAxisIIR_Init(&iirFiltAccel, filterAlpha);
     ThreeAxisIIR_Init(&iirFiltGyro, filterAlpha);
@@ -222,6 +223,7 @@ int main(){
     double gr_filtered, gp_filtered, gy_filtered;
     double gr_rotated,  gp_rotated,  gy_rotated;
 
+
     // Initialize output deque
     std::deque<double> outData;
     outData.clear();
@@ -237,7 +239,7 @@ int main(){
         std::cerr << "Error: Unable to create directory." << std::endl;
         return -1;
     }
-
+    
     //Do not read the current yaw angle
     device.calc_yaw = false;
 
@@ -246,7 +248,7 @@ int main(){
 
     double compoundAccelerationVector{ 0.0 };
 
-    double threshold{ 0.5 }; // Example threshold value
+    double threshold{ 0.25 }; // Example threshold value: 0.5 before
     int sampleNumber{ 0 };
 
     // outData deque size is fixed value for now:
@@ -277,7 +279,7 @@ int main(){
         rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, gr_filtered, gp_filtered, gy_filtered, &gr_rotated, &gp_rotated, &gy_rotated);
 
         // Calculate Rotated Compound Acceleration Vector:
-        compoundAccelerationVector = compoundVector(az_rotated, ay_rotated, az_rotated);
+        compoundAccelerationVector = compoundVector(ax_rotated, ay_rotated, az_rotated);
         
         // Apply Active Filter:
         actFilter.feedData(compoundAccelerationVector);
