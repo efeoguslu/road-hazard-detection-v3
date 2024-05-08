@@ -87,13 +87,13 @@ SensitivityConfig highSensitivityConfig{ "high", 0.12 };
 
 SensitivityConfig getNextConfig(const SensitivityConfig& current) {
     if (current.getConfigName() == "low") {
-        blinkLED(ledPin, 1);
+        blinkLED(ledPin, 2);
         return midSensitivityConfig;
     } else if (current.getConfigName() == "mid") {
-        blinkLED(ledPin, 2);
+        blinkLED(ledPin, 3);
         return highSensitivityConfig;
     } else if (current.getConfigName() == "high") {
-        blinkLED(ledPin, 3);
+        blinkLED(ledPin, 1);
         return lowSensitivityConfig;
     } else {
         // Default case, return mid as the next config
@@ -520,7 +520,7 @@ int main(){
             std::cout << "Button was pressed for: " << buttonPressDuration << " ms" << std::endl;
 
             if(buttonPressDuration > 3000){
-                currentConfig = getNextConfig(currentConfig);
+                currentConfig.setConfig(getNextConfig(currentConfig));
                 std::cout << "Configuration changed to: " << currentConfig.getConfigName() << std::endl;
             }
     
