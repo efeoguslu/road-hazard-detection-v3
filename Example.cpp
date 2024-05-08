@@ -41,6 +41,7 @@ const double filterAlpha{ 0.9 };
 // Define the pin we are going to use
 const int ledPin{ 17 }; // Example: GPIO 17
 const int buttonPin{ 16 };
+const int onLedPin{ 15 };
 // const int detectLedPin{ 26 };
 
 
@@ -53,6 +54,38 @@ ThreeAxisIIR iirFiltAccel;
 ThreeAxisIIR iirFiltGyro;
 
 // ----------------------------------------------------------------------------------------------
+
+
+/*
+
+
+* getConfigStr -> log'a geçir (done)
+* threshold'u currentConfig'den al (done)
+* x saniye basılı tutulduğunda bir sonraki config'e geçir (1-2-3-1-2-3-1-2-...)
+* bu geçirme operasyonu olunca hangi config'e geçtiğini led'den uyar (blink sayısına göre olabilir)
+
+* basmaya devam ettiğinde ne olacak?  
+
+*/
+
+class SensitivityConfig{
+public: 
+    std::string configName;
+    double threshold;
+    SensitivityConfig(std::string name, double thres) : configName{name}, threshold{thres} { };
+    
+    void setConfig(SensitivityConfig inConf){
+        this->configName = inConf.configName;
+        this->threshold = inConf.threshold;
+    }
+    
+    std::string getConfigStr()const{
+        std::string ret = ",configname=" + this->configName + ",threshold=" + std::to_string(this->threshold);
+        return ret;
+    }
+};
+
+
 
 // Function to get the current timestamp as a string
 const std::string getCurrentTimestamp() {
@@ -159,7 +192,7 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
 
 
 bool detectBump(const std::deque<double>& completedData, double threshold){
-
+    
     if (completedData.size() < 3){
         return false; // Not enough data points to detect a peak
     }
@@ -206,6 +239,7 @@ int main(){
     // Setup the pin as output
     pinMode(ledPin, OUTPUT);
     // pinMode(detectLedPin, OUTPUT);
+    pinMode(onLedPin, OUTPUT);
 
     // Configure the pin as input
     pinMode(buttonPin, INPUT); 
@@ -259,7 +293,7 @@ int main(){
 
     double compoundAccelerationVector{ 0.0 };
 
-    double threshold{ 0.25 }; // Example threshold value: 0.5 before
+    // double threshold{ 0.25 }; // Example threshold value: 0.5 before
     int sampleNumber{ 0 };
 
     // outData deque size is fixed value for now:
@@ -272,6 +306,19 @@ int main(){
 
 
     digitalWrite(ledPin, LOW);
+    digitalWrite(onLedPin, HIGH);
+
+    SensitivityConfig currentConfig{"default", 0.25};
+
+    SensitivityConfig lowSensitivityConfig{  "low",  0.5  };
+    SensitivityConfig midSensitivityConfig{  "mid",  0.25 };
+    SensitivityConfig highSensitivityConfig{ "high", 0.12 };
+
+    currentConfig.setConfig(midSensitivityConfig);
+
+
+    bool buttonPressed{ false };
+    std::chrono::time_point<std::chrono::high_resolution_clock> buttonPressTime;
 
     while(true){
         // Record loop time stamp:
@@ -322,7 +369,7 @@ int main(){
             }
             
             
-            if (!bumpDetected && detectBump(outData, threshold)) { 
+            if (!bumpDetected && detectBump(outData, currentConfig.threshold)) { 
                 bumpDetected = true;
                 digitalWrite(ledPin, HIGH);
                 ++activeCount;
@@ -437,64 +484,50 @@ int main(){
 
         */
 
-        // -------------------------------------------------------------------------------------------------------------------------
-        
-        
-        /*
-        if(iirFilterOutput >= 1.4f){
-            bumpCounterNaive++;
-            // std::cout << "Bump Count for Naive Case: " << bumpCounterNaive << "\n";
-            logData(bumpCountNaiveLogFile, bumpCounterNaive);
-        }
-
-        if(iirFilterOutput*iirFilterOutput >= 1.8f){
-            bumpCounterNaiveSquared++;
-            // std::cout << "Bump Count for Naive Squared Case: " << bumpCounterNaiveSquared << "\n";
-            logData(bumpCountNaiveSquaredLogFile, bumpCounterNaiveSquared);
-        }
-        */
-        
-        
-        
-        
-        
+ 
         // -------------------------------------------------------------------------------------------------------------------------
 
 
-        
-        
-        /*
-        std::vector<std::ofstream*> logFiles = {&axLogFile, &ayLogFile, &azLogFile, &grLogFile, &gpLogFile, &gyLogFile};
-        std::vector<float> data = {ax, ay, az, gr, gp, gy}; 
-
-        for (size_t i = 0; i < logFiles.size(); ++i) {
-            logData(*logFiles[i], data[i]);
-        }
-        */
-
-        // -------------------------------------------------------------------------------------------------------------------------
-
-        
-        
-        //logData(rotatedAzLogFile, az_rotated);
-        //logData(iirFilterLogFile, iirFilterOutput); // az_rotated is filtered with IIR 
-        
-        // logData(firFilterLogFile, firFilterOutput); // az_rotated is filtered with FIR
-
-        //logAngles(anglesLogFile, rollAngle, pitchAngle);
-        //logData(sensorLogFile, ax, ay, az, gr, gp, gy);
 
 
-        /*
-        axMovingAvg.updateAndLogMovingAverage(axFilteredLogFile, ax);
-        ayMovingAvg.updateAndLogMovingAverage(ayFilteredLogFile, ay);
-        azMovingAvg.updateAndLogMovingAverage(azFilteredLogFile, az);
-        rotatedAzMovingAvg.updateAndLogMovingAverage(rotatedAzFilteredLogFile, az_rotated); 
-        */
 
-       
+
+
         // Check the button state
         unsigned int buttonState = digitalRead(buttonPin) == LOW ? 1 : 0;
+
+        // If the button is pressed and was not pressed in the previous iteration
+        if (buttonState && !buttonPressed) {
+            buttonPressed = true;
+            buttonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
+        }
+
+        // If the button is not pressed and was pressed in the previous iteration
+        else if (!buttonState && buttonPressed) {
+            buttonPressed = false;
+            auto buttonReleaseTime = std::chrono::high_resolution_clock::now();
+            auto buttonPressDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buttonReleaseTime - buttonPressTime).count();
+            std::cout << "Button was pressed for: " << buttonPressDuration << " ms" << std::endl;
+
+            if(buttonPressDuration > 1000 && buttonPressDuration < 2000){
+                currentConfig.setConfig(lowSensitivityConfig);
+                blinkLED(ledPin, 1);
+            }
+            if(buttonPressDuration > 2000 && buttonPressDuration < 3000){
+                currentConfig.setConfig(midSensitivityConfig);
+                blinkLED(ledPin, 2);
+            }
+            if(buttonPressDuration > 3000 && buttonPressDuration < 5000){
+                currentConfig.setConfig(highSensitivityConfig);
+                blinkLED(ledPin, 3);
+            }
+    
+        }
+        
+
+
+
+        
 
         std::string logOut = 
         ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
@@ -505,9 +538,15 @@ int main(){
         ",gr_rotated="+std::to_string(gr_rotated)+",gp_rotated="+std::to_string(gp_rotated)+",gy_rotated="+std::to_string(gy_rotated)+\
         ",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+std::to_string(pitchAngle)+\
         ",comp_vector="+std::to_string(compoundAccelerationVector)+\
-        ",button_state="+std::to_string(buttonState);
+        ",button_state="+std::to_string(buttonState)+\
+        currentConfig.getConfigStr();
         
         TLogger::TLogInfo(directoryPath, allSensorLogFile, logOut);
+
+
+
+
+
 
 
         // Calculate Loop Duration

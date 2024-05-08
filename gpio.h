@@ -2,9 +2,11 @@
 #define GPIO_H
 
 #include <wiringPi.h>
+#include <thread>
 
 
-void blink_led(int ledPin, int blinkCount, int delayTime);
+
+void blinkLED(int ledPin, int blinkCount);
 
 
 #endif // GPIO_H
