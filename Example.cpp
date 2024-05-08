@@ -56,18 +56,6 @@ ThreeAxisIIR iirFiltGyro;
 // ----------------------------------------------------------------------------------------------
 
 
-/*
-
-
-* getConfigStr -> log'a geçir (done)
-* threshold'u currentConfig'den al (done)
-* x saniye basılı tutulduğunda bir sonraki config'e geçir (1-2-3-1-2-3-1-2-...)
-* bu geçirme operasyonu olunca hangi config'e geçtiğini led'den uyar (blink sayısına göre olabilir)
-
-* basmaya devam ettiğinde ne olacak?  
-
-*/
-
 class SensitivityConfig{
 public: 
     std::string configName;
@@ -83,9 +71,35 @@ public:
         std::string ret = ",configname=" + this->configName + ",threshold=" + std::to_string(this->threshold);
         return ret;
     }
+
+    std::string getConfigName()const{
+        return this->configName;
+    }
+
+    
 };
 
+SensitivityConfig currentConfig{"default", 0.25};
+SensitivityConfig lowSensitivityConfig{  "low",  0.5  };
+SensitivityConfig midSensitivityConfig{  "mid",  0.25 };
+SensitivityConfig highSensitivityConfig{ "high", 0.12 };
 
+
+SensitivityConfig getNextConfig(const SensitivityConfig& current) {
+    if (current.getConfigName() == "low") {
+        blinkLED(ledPin, 1);
+        return midSensitivityConfig;
+    } else if (current.getConfigName() == "mid") {
+        blinkLED(ledPin, 2);
+        return highSensitivityConfig;
+    } else if (current.getConfigName() == "high") {
+        blinkLED(ledPin, 3);
+        return lowSensitivityConfig;
+    } else {
+        // Default case, return mid as the next config
+        return midSensitivityConfig;
+    }
+}
 
 // Function to get the current timestamp as a string
 const std::string getCurrentTimestamp() {
@@ -308,11 +322,7 @@ int main(){
     digitalWrite(ledPin, LOW);
     digitalWrite(onLedPin, HIGH);
 
-    SensitivityConfig currentConfig{"default", 0.25};
 
-    SensitivityConfig lowSensitivityConfig{  "low",  0.5  };
-    SensitivityConfig midSensitivityConfig{  "mid",  0.25 };
-    SensitivityConfig highSensitivityConfig{ "high", 0.12 };
 
     currentConfig.setConfig(midSensitivityConfig);
 
@@ -509,17 +519,9 @@ int main(){
             auto buttonPressDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buttonReleaseTime - buttonPressTime).count();
             std::cout << "Button was pressed for: " << buttonPressDuration << " ms" << std::endl;
 
-            if(buttonPressDuration > 1000 && buttonPressDuration < 2000){
-                currentConfig.setConfig(lowSensitivityConfig);
-                blinkLED(ledPin, 1);
-            }
-            if(buttonPressDuration > 2000 && buttonPressDuration < 3000){
-                currentConfig.setConfig(midSensitivityConfig);
-                blinkLED(ledPin, 2);
-            }
-            if(buttonPressDuration > 3000 && buttonPressDuration < 5000){
-                currentConfig.setConfig(highSensitivityConfig);
-                blinkLED(ledPin, 3);
+            if(buttonPressDuration > 3000){
+                currentConfig = getNextConfig(currentConfig);
+                std::cout << "Configuration changed to: " << currentConfig.getConfigName() << std::endl;
             }
     
         }
