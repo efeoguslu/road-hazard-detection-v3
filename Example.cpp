@@ -45,7 +45,8 @@ const int onLedPin{ 15 };
 // const int detectLedPin{ 26 };
 
 
-static int activeCount = 0;
+static int activeCount{ 0 };
+const int buttonPressDurationThresholdMs{ 3000 };
 
 // ----------------------------------------------------------------------------------------------
 
@@ -60,6 +61,7 @@ class SensitivityConfig{
 public: 
     std::string configName;
     double threshold;
+
     SensitivityConfig(std::string name, double thres) : configName{name}, threshold{thres} { };
     
     void setConfig(SensitivityConfig inConf){
@@ -79,21 +81,25 @@ public:
     
 };
 
-SensitivityConfig currentConfig{"default", 0.25};
-SensitivityConfig lowSensitivityConfig{  "low",  0.5  };
-SensitivityConfig midSensitivityConfig{  "mid",  0.25 };
-SensitivityConfig highSensitivityConfig{ "high", 0.12 };
+SensitivityConfig currentConfig{ "default", 0.12 }; // 0.12?
+
+SensitivityConfig lowSensitivityConfig{  "low",  0.25 }; // 0.25?
+SensitivityConfig midSensitivityConfig{  "mid",  0.12 }; // 0.12? 
+SensitivityConfig highSensitivityConfig{ "high", 0.07 }; // 0.07?
 
 
 SensitivityConfig getNextConfig(const SensitivityConfig& current) {
     if (current.getConfigName() == "low") {
         blinkLED(ledPin, 2);
+        digitalWrite(ledPin, LOW);
         return midSensitivityConfig;
     } else if (current.getConfigName() == "mid") {
         blinkLED(ledPin, 3);
+        digitalWrite(ledPin, LOW);
         return highSensitivityConfig;
     } else if (current.getConfigName() == "high") {
         blinkLED(ledPin, 1);
+        digitalWrite(ledPin, LOW);
         return lowSensitivityConfig;
     } else {
         // Default case, return mid as the next config
@@ -110,11 +116,11 @@ const std::string getCurrentTimestamp() {
     return ss.str();
 }
 
-bool createDirectory(const std::string& path) {
+inline bool createDirectory(const std::string& path) {
     return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 }
 
-double compoundVector(double x, double y, double z){
+inline double compoundVector(double x, double y, double z){
     return std::sqrt(x*x + y*y + z*z);
 }
 
@@ -258,9 +264,6 @@ int main(){
     // Configure the pin as input
     pinMode(buttonPin, INPUT); 
 
-    // Blink the LED 3 times with a delay of 0.1 second between each state change
-    // blink_led(ledPin, 3, 100);
-
     // Variables to store the accel, gyro and angle values
     double ax, ay, az;
     double gr, gp, gy;
@@ -311,18 +314,15 @@ int main(){
     int sampleNumber{ 0 };
 
     // outData deque size is fixed value for now:
-    unsigned int wholeDequeSize{ 150 };
+    const unsigned int wholeDequeSize{ 150 };
 
     // Initialization of number of samples to be removed:
     unsigned int removeSamples{ 0 };
 
     bool bumpDetected{ false };
 
-
     digitalWrite(ledPin, LOW);
     digitalWrite(onLedPin, HIGH);
-
-
 
     currentConfig.setConfig(midSensitivityConfig);
 
@@ -519,7 +519,7 @@ int main(){
             auto buttonPressDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buttonReleaseTime - buttonPressTime).count();
             std::cout << "Button was pressed for: " << buttonPressDuration << " ms" << std::endl;
 
-            if(buttonPressDuration > 3000){
+            if(buttonPressDuration > buttonPressDurationThresholdMs){
                 currentConfig.setConfig(getNextConfig(currentConfig));
                 std::cout << "Configuration changed to: " << currentConfig.getConfigName() << std::endl;
             }
@@ -558,7 +558,7 @@ int main(){
 
         // std::cout << duration << std::endl;
 
-        auto delayMs{ static_cast<long>(loopDurationMs - duration)} ;
+        auto delayMs{ static_cast<long>(loopDurationMs - duration) } ;
 
         if (delayMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
