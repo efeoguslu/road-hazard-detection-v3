@@ -110,7 +110,7 @@ void logUser(std::ofstream &logfile, unsigned int state){
     }
 }
 
-
+/*
 void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile) {
     if (!inputFile.is_open()) {
         std::cerr << "Input file is not open." << std::endl;
@@ -133,6 +133,8 @@ void extractSensorData(std::ifstream& inputFile, std::ofstream& outputFile) {
         }
     }
 }
+
+*/
 
 /*
 // Function to create the .plt file

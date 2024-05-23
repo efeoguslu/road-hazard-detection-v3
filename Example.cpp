@@ -20,9 +20,11 @@
 #include "queue.h"
 #include "gpio.h"
 #include "detection.h"
+#include "button.h"
+#include "rgbled.h"
+// #include "sensitivity.h"
 
 #include "common-structs.hpp"
-
 
 MPU6050 device(0x68, false);
 
@@ -39,14 +41,15 @@ double dt{ 0.0 };
 const double filterAlpha{ 0.9 };
 
 // Define the pin we are going to use
-const int ledPin{ 17 }; // Example: GPIO 17
-const int buttonPin{ 16 };
-const int onLedPin{ 15 };
+// const int ledPin{ 17 }; // Example: GPIO 17
+
+// const int buttonPin{ 16 };
+
+// const int onLedPin{ 15 };
 // const int detectLedPin{ 26 };
 
 
 static int activeCount{ 0 };
-const int buttonPressDurationThresholdMs{ 3000 };
 
 // ----------------------------------------------------------------------------------------------
 
@@ -57,6 +60,7 @@ ThreeAxisIIR iirFiltGyro;
 // ----------------------------------------------------------------------------------------------
 
 
+/*
 class SensitivityConfig{
 public: 
     std::string configName;
@@ -77,35 +81,63 @@ public:
     std::string getConfigName()const{
         return this->configName;
     }
+};
+*/
 
-    
+class SensitivityConfig {
+public:
+    std::string configName;
+    double bumpThreshold;
+    double potholeThreshold;
+
+    SensitivityConfig(std::string name, double bumpThres, double potholeThres) : configName{name}, bumpThreshold{bumpThres}, potholeThreshold{potholeThres} { }
+
+    void setConfig(SensitivityConfig inConf) {
+        this->configName = inConf.configName;
+        this->bumpThreshold = inConf.bumpThreshold;
+        this->potholeThreshold = inConf.potholeThreshold;
+    }
+
+    std::string getConfigStr() const {
+        std::string ret = ",configname=" + this->configName +
+                          ",bumpThreshold=" + std::to_string(this->bumpThreshold) +
+                          ",potholeThreshold=" + std::to_string(this->potholeThreshold);
+        return ret;
+    }
+
+    std::string getConfigName() const {
+        return this->configName;
+    }
 };
 
-SensitivityConfig currentConfig{ "default", 0.12 }; // 0.12?
-
-SensitivityConfig lowSensitivityConfig{  "low",  0.25 }; // 0.25?
-SensitivityConfig midSensitivityConfig{  "mid",  0.12 }; // 0.12? 
-SensitivityConfig highSensitivityConfig{ "high", 0.07 }; // 0.07?
 
 
-SensitivityConfig getNextConfig(const SensitivityConfig& current) {
+SensitivityConfig lowSensitivityConfig{  "low",  0.25, 0.15 }; 
+SensitivityConfig midSensitivityConfig{  "mid",  0.12, 0.09 }; 
+SensitivityConfig highSensitivityConfig{ "high", 0.07, 0.04 }; 
+SensitivityConfig currentConfig{ "default", 0.12, 0.09 };
+
+
+SensitivityConfig getNextConfig(const SensitivityConfig& current, RgbLed& led) {
     if (current.getConfigName() == "low") {
-        blinkLED(ledPin, 2);
-        digitalWrite(ledPin, LOW);
+        led.configurationChanged(2);
         return midSensitivityConfig;
+
     } else if (current.getConfigName() == "mid") {
-        blinkLED(ledPin, 3);
-        digitalWrite(ledPin, LOW);
+        led.configurationChanged(3);
         return highSensitivityConfig;
+
     } else if (current.getConfigName() == "high") {
-        blinkLED(ledPin, 1);
-        digitalWrite(ledPin, LOW);
+        led.configurationChanged(1);
         return lowSensitivityConfig;
+
     } else {
         // Default case, return mid as the next config
         return midSensitivityConfig;
     }
 }
+
+
 
 // Function to get the current timestamp as a string
 const std::string getCurrentTimestamp() {
@@ -132,7 +164,7 @@ void rotateAll(double rollAngle, double pitchAngle, double x, double y, double z
 }
 
 // Time stabilization function
-double timeSync(auto t1){
+double timeSync(std::chrono::_V2::system_clock::time_point t1){
     // Find duration to sleep thread
     auto t2 = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
@@ -202,6 +234,8 @@ void complementaryFilter(double ax, double ay, double az, double gr, double gp, 
 }
 
 
+
+
 void AppendDeque(std::deque<double> &target, std::deque<double> source)
 {
     for(long unsigned int i = 0; i < source.size(); i++)
@@ -241,6 +275,8 @@ bool detectBump(const std::deque<double>& completedData, double threshold){
     return false; // Return false if no bump is detected
 }
 
+
+
 int main(){
 
     // Initialize Active Filter
@@ -256,13 +292,12 @@ int main(){
     // Initialize wiringPi and allow the use of BCM pin numbering
     wiringPiSetupGpio();
 
-    // Setup the pin as output
-    pinMode(ledPin, OUTPUT);
-    // pinMode(detectLedPin, OUTPUT);
-    pinMode(onLedPin, OUTPUT);
+    RgbLed rgbLed{ redPinNumber, greenPinNumber, bluePinNumber };
 
-    // Configure the pin as input
-    pinMode(buttonPin, INPUT); 
+    // Setup the pin as output
+    //pinMode(ledPin, OUTPUT);
+    // pinMode(detectLedPin, OUTPUT);
+    //pinMode(onLedPin, OUTPUT);
 
     // Variables to store the accel, gyro and angle values
     double ax, ay, az;
@@ -321,11 +356,14 @@ int main(){
 
     bool bumpDetected{ false };
 
-    digitalWrite(ledPin, LOW);
-    digitalWrite(onLedPin, HIGH);
+    // digitalWrite(ledPin, LOW);
+    // digitalWrite(onLedPin, HIGH);
 
     currentConfig.setConfig(midSensitivityConfig);
 
+    Button bumpButton{ bumpPin };
+    Button potholeButton{ potholePin };
+    Button modeButton{ modePin };
 
     bool buttonPressed{ false };
     std::chrono::time_point<std::chrono::high_resolution_clock> buttonPressTime;
@@ -333,7 +371,7 @@ int main(){
     while(true){
         // Record loop time stamp:
         auto startTime{ std::chrono::high_resolution_clock::now() };
-        
+
         // Get the current accelerometer values:
         device.getAccel(&ax, &ay, &az);
         // Get the filtered accelerometer values:
@@ -366,23 +404,22 @@ int main(){
         sampleNumber++;
 
 
+
         if(outData.size() > wholeDequeSize){
 
             removeSamples = static_cast<unsigned int>(outData.size() - wholeDequeSize);
             outData.erase(outData.begin(), outData.begin() + removeSamples);
 
-            
             if((sampleNumber % wholeDequeSize) == 0){
                 bumpDetected = false;
-                digitalWrite(ledPin, LOW);
-
+                // digitalWrite(ledPin, LOW);
             }
-            
             
             if (!bumpDetected && detectBump(outData, currentConfig.threshold)) { 
                 bumpDetected = true;
-                digitalWrite(ledPin, HIGH);
+                //digitalWrite(ledPin, HIGH);
                 ++activeCount;
+                rgbLed.bumpDetected();
                 std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
                 std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
                 TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
@@ -392,144 +429,49 @@ int main(){
         
 
 
-        /*
+        // ------------------------------------------------------------------------------------------------------
 
-        constexpr int width = 5;
-
-        std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
-        std::cout 
-            << " AccZ (m/s^2): "                   << std::setw(width) << az << " | "
-            << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
-            << " Filter Output: "               << std::setw(width) << iirFilterOutput << std::endl;
-        */
         
-
-
-        // auto timestamp {getCurrentTimestamp()};
-        // -----------------------------------------------------------------------------------------------
-
-        // Printing to Terminal:
-        
-        //std::cout << "Time: " << timestamp << " Accel: " << ax << ", Y: " << ay << ", Z: " << az << " Bump Counter: " << bumpCounter << "\n"; 
-
-
-        /*
-        std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
-        std::cout 
-            << "ax: "         << std::setw(8) << ax
-            << " ay: "        << std::setw(8) << ay 
-            << " az: "        << std::setw(8) << az
-            << " ax_filtered: "   << std::setw(8) << ax_filtered
-            << " ay_filtered: "   << std::setw(8) << ay_filtered
-            << " az_filtered: "   << std::setw(8) << az_filtered
-            << " ax_rotated: "   << std::setw(8) << ax_rotated
-            << " ay_rotated: "   << std::setw(8) << ay_rotated
-            << " az_rotated: "   << std::setw(8) << az_rotated
-            << " Roll Angle: "  << std::setw(8) << rollAngle
-            << " Pitch Angle: "    << std::setw(8) << pitchAngle << std::endl;
-        */
-        
-        
-           
-        
-        // -------------------------------------------------------------------------------------------------------------------------
-
-        /*
-        std::cout << std::fixed << std::setprecision(3); // Set precision for floating point numbers
-
-        std::cout 
-            << "AccX (m/s^2): "         << std::setw(8) << ax
-            << " AccY (m/s^2): "        << std::setw(8) << ay 
-            << " AccZ (m/s^2): "        << std::setw(8) << az
-            << " Roll Angle (deg): "    << std::setw(8) << rollAngle
-            << " Pitch Angle (deg): "   << std::setw(8) << pitchAngle << std::endl;
-        */
-
-        // -------------------------------------------------------------------------------------------------------------------------
-
-        /*
-        std::cout 
-            << "Roll Angle (deg): "     << std::setw(8) << roll_angle(ax, ay, az)
-            << " Roll Rate (deg/s): "   << std::setw(8) << gr
-            << " Pitch Angle (deg): "   << std::setw(8) << pitch_angle(ax, ay, az)
-            << " Pitch Rate (deg/s): "  << std::setw(8) << gp
-            << " Yaw Rate (deg/s): "    << std::setw(8) << gy << std::endl; 
-        */
-
-        //std::cout << "phiHat_deg: " << std::setw(8) << phiHat_deg(ay, az) << "thetaHat_deg: " << std::setw(8) << thetaHat_deg(ax) << std::endl;
-
-        // -------------------------------------------------------------------------------------------------------------------------
-        
-        /*
-        constexpr int width = 5;
-
-        std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
-        std::cout 
-            << "AccX (m/s^2): "                    << std::setw(width) << ax << " | "
-            << " AccY (m/s^2): "                   << std::setw(width) << ay << " | "
-            << " AccZ (m/s^2): "                   << std::setw(width) << az << " | "
-            << " AccX (rotated) (m/s^2): "         << std::setw(width) << ax_rotated << " | "
-            << " AccY (rotated) (m/s^2): "         << std::setw(width) << ay_rotated << " | "
-            << " AccZ (rotated)  (m/s^2): "        << std::setw(width) << az_rotated << " | "
-            << " Roll Angle (deg): "               << std::setw(width) << rollAngle << " | "
-            << " Pitch Angle (deg): "              << std::setw(width) << pitchAngle << std::endl;
-        */
-        
-        
-        
-        
-        
-        /*
-
-        std::cout << std::fixed << std::setprecision(2); // Set precision for floating point numbers
-        std::cout 
-            << "AccX (m/s^2): "         << std::setw(width) << ax << " | "
-            << " AccY (m/s^2): "        << std::setw(width) << ay << " | "
-            << " AccZ (m/s^2): "        << std::setw(width) << az << " | "
-            << " Pitch Angle Formula: " << std::setw(width) << pitchAngleFormula << " | "
-            << " Pitch Angle Comp: "   << std::setw(width) << pitchAngle << " | "
-            << " Roll Angle Formula: " << std::setw(width) << rollAngleFormula << " | "
-            << " Roll Angle Comp: " << std::setw(width) << rollAngle << std::endl;
-
-
-        */
-
- 
-        // -------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
         // Check the button state
-        unsigned int buttonState = digitalRead(buttonPin) == LOW ? 1 : 0;
+        //modeButton.checkButton();
+
+        int modeButtonState{ modeButton.getButtonState() };
 
         // If the button is pressed and was not pressed in the previous iteration
-        if (buttonState && !buttonPressed) {
+        if (modeButtonState && !buttonPressed) {
             buttonPressed = true;
             buttonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
         }
 
         // If the button is not pressed and was pressed in the previous iteration
-        else if (!buttonState && buttonPressed) {
+        else if (!modeButtonState && buttonPressed) {
             buttonPressed = false;
             auto buttonReleaseTime = std::chrono::high_resolution_clock::now();
             auto buttonPressDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buttonReleaseTime - buttonPressTime).count();
             std::cout << "Button was pressed for: " << buttonPressDuration << " ms" << std::endl;
 
             if(buttonPressDuration > buttonPressDurationThresholdMs){
-                currentConfig.setConfig(getNextConfig(currentConfig));
+                currentConfig.setConfig(getNextConfig(currentConfig, rgbLed));
                 std::cout << "Configuration changed to: " << currentConfig.getConfigName() << std::endl;
             }
     
         }
         
 
-
-
+        // Update LED
+        rgbLed.update();
         
+
+
+
+
+        std::cout << sampleNumber << " " << currentConfig.getConfigStr() << "\n";
+
+
+
+
+
+
 
         std::string logOut = 
         ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
@@ -540,10 +482,21 @@ int main(){
         ",gr_rotated="+std::to_string(gr_rotated)+",gp_rotated="+std::to_string(gp_rotated)+",gy_rotated="+std::to_string(gy_rotated)+\
         ",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+std::to_string(pitchAngle)+\
         ",comp_vector="+std::to_string(compoundAccelerationVector)+\
-        ",button_state="+std::to_string(buttonState)+\
+        ",pothole_button_state="+potholeButton.getButtonStateStr()+",bump_button_state="+bumpButton.getButtonStateStr()+",mode_button_state="+modeButton.getButtonStateStr()+\
         currentConfig.getConfigStr();
         
         TLogger::TLogInfo(directoryPath, allSensorLogFile, logOut);
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -558,6 +511,7 @@ int main(){
 
         // std::cout << duration << std::endl;
 
+
         auto delayMs{ static_cast<long>(loopDurationMs - duration) } ;
 
         if (delayMs > 0) {
@@ -569,5 +523,4 @@ int main(){
 
 	return 0;
 }
-
 
