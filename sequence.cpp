@@ -11,9 +11,8 @@ SequenceType calculateTrend(const std::deque<double>& window) {
     else return SequenceType::Stable;
 }
 
-
 // Function to classify the signal in real-time
-SequenceType classifySignalRealtime(const std::deque<double>& signal, size_t windowSize) {
+SequenceType classifySignalRealTime(const std::deque<double>& signal, size_t windowSize) {
     if (signal.size() < windowSize) return SequenceType::None;
     std::deque<double> window(signal.end() - windowSize, signal.end());
     return calculateTrend(window);

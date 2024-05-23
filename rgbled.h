@@ -17,7 +17,7 @@ public:
     RgbLed(int redPin, int greenPin, int bluePin);
 
     void bumpDetected();
-    void pitDetected();
+    void potholeDetected();
     void configurationChanged(int configNumber);
 
     void update();

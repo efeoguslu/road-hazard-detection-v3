@@ -26,38 +26,6 @@ void ThreeAxisIIR_Init(ThreeAxisIIR *filt, double alpha);
 
 void ThreeAxisIIR_Update(ThreeAxisIIR *filt, double in_x, double in_y, double in_z, double *out_x, double *out_y, double *out_z);
 
-
-// -------------------------------------------------------------------------------------------------------------------------
-
-/*
-typedef struct{
-    double alpha;
-    double out;
-} IFX_EMA;
-
-
-void IFX_EMA_Init(IFX_EMA *filt, double alpha);
-void IFX_EMA_SetAlpha(IFX_EMA *filt, double alpha);
-double IFX_EMA_Update(IFX_EMA *filt, double in);
-*/
-
-
-// -------------------------------------------------------------------------------------------------------------------------
-
-/*
-typedef struct{
-    double buf[FIR_FILTER_LENGTH]; // circular buffer
-    uint8_t bufIndex;
-    double out;
-}FIRFilter;
-
-void FIRFilter_Init(FIRFilter *fir);
-double FIRFilter_Update(FIRFilter *fir, double inp);
-*/
-
-
-double movingAverage(const std::vector<double>& data, int windowSize);
-
 // -------------------------------------------------------------------------------------------------------------------------
 
 class ActiveFilter
@@ -91,7 +59,7 @@ public:
     void                setThreshold(double threshold);
     void                setOffset(double offset);
     void                feedData(double data);
-    int                 getCompletedDataSize();
+    long unsigned int   getCompletedDataSize();
     std::deque<double>  getCompletedData();     // maybe return can be changed as vector / queue 
 
 private:

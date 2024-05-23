@@ -13,9 +13,7 @@ enum class SequenceType {
 };
 
 
-
-
 SequenceType calculateTrend(const std::deque<double>& window);
-SequenceType classifySignalRealtime(const std::deque<double>& signal, size_t windowSize);
+SequenceType classifySignalRealTime(const std::deque<double>& signal, size_t windowSize);
 
 #endif

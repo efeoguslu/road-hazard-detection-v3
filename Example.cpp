@@ -14,15 +14,11 @@
 #include <stack>
 #include <mutex>
 
-#include "logging.h"
 #include "MPU6050.h"
 #include "filters.h"
-#include "queue.h"
-#include "gpio.h"
-#include "detection.h"
 #include "button.h"
 #include "rgbled.h"
-// #include "sensitivity.h"
+#include "sequence.h"
 
 #include "common-structs.hpp"
 
@@ -49,7 +45,8 @@ const double filterAlpha{ 0.9 };
 // const int detectLedPin{ 26 };
 
 
-static int activeCount{ 0 };
+static int activeBumpCount{ 0 };
+static int activePotholeCount{ 0 };
 
 // ----------------------------------------------------------------------------------------------
 
@@ -110,13 +107,12 @@ public:
     }
 };
 
-
+// Pothole thresholds may be subject to change:
 
 SensitivityConfig lowSensitivityConfig{  "low",  0.25, 0.15 }; 
 SensitivityConfig midSensitivityConfig{  "mid",  0.12, 0.09 }; 
 SensitivityConfig highSensitivityConfig{ "high", 0.07, 0.04 }; 
 SensitivityConfig currentConfig{ "default", 0.12, 0.09 };
-
 
 SensitivityConfig getNextConfig(const SensitivityConfig& current, RgbLed& led) {
     if (current.getConfigName() == "low") {
@@ -137,8 +133,6 @@ SensitivityConfig getNextConfig(const SensitivityConfig& current, RgbLed& led) {
     }
 }
 
-
-
 // Function to get the current timestamp as a string
 const std::string getCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
@@ -157,7 +151,6 @@ inline double compoundVector(double x, double y, double z){
 }
 
 void rotateAll(double rollAngle, double pitchAngle, double x, double y, double z, double* x_rotated, double* y_rotated, double* z_rotated){
-
     *x_rotated =  x*std::cos(pitchAngle)                                             + z*std::sin(pitchAngle);
     *y_rotated = -x*std::sin(pitchAngle)*std::sin(rollAngle) + y*std::cos(rollAngle) + z*std::cos(pitchAngle)*std::sin(rollAngle);
     *z_rotated = -x*std::sin(pitchAngle)*std::cos(rollAngle) - y*std::sin(rollAngle) + z*std::cos(rollAngle)*std::cos(pitchAngle);  
@@ -233,9 +226,6 @@ void complementaryFilter(double ax, double ay, double az, double gr, double gp, 
 
 }
 
-
-
-
 void AppendDeque(std::deque<double> &target, std::deque<double> source)
 {
     for(long unsigned int i = 0; i < source.size(); i++)
@@ -245,7 +235,9 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
 }
 
 
-bool detectBump(const std::deque<double>& completedData, double threshold){
+
+
+bool detectHazard(const std::deque<double>& completedData, double bumpThreshold, double potholeThreshold, SequenceType& sequenceType){
     
     if (completedData.size() < 3){
         return false; // Not enough data points to detect a peak
@@ -258,7 +250,53 @@ bool detectBump(const std::deque<double>& completedData, double threshold){
     // Calculate the absolute difference between the max and min values
     double diff{ std::abs(*maxEle - *minEle) };
 
-    bool isPeak{ false }; 
+    bool isPeak{ false };
+    bool isDip{ false };
+
+    for (size_t i = 1; i < completedData.size() - 1; ++i) {
+
+        // Check if the current data point is greater than both its adjacent points
+        if ((completedData[i] > completedData[i - 1]) && (completedData[i] > completedData[i + 1])){
+            isPeak = true;
+        }
+
+        // Check if the current data point is less than both its adjacent points (dip)
+        else if ((completedData[i] < completedData[i - 1]) && (completedData[i] < completedData[i + 1])){
+            isDip = true;
+        }
+    }
+
+    // Determine the sequence type based on peak or dip detection
+    if (isPeak && (diff > bumpThreshold)) {
+        sequenceType = SequenceType::Rising;
+    } else if (isDip && (diff > potholeThreshold)) {
+        sequenceType = SequenceType::Falling;
+    } else {
+        sequenceType = SequenceType::Stable;
+        return false;
+    }
+
+    if ((isPeak && (diff > bumpThreshold)) || (isDip && (diff > potholeThreshold))){
+        return true; // Bump or Pothole detected
+    }
+    
+    return false; // Return false if no bump or pothole is detected
+}
+
+bool detectBump(const std::deque<double>& completedData, double bumpThreshold){
+    
+    if (completedData.size() < 3){
+        return false; // Not enough data points to detect a peak
+    }
+
+    // Find the maximum and minimum values in the deque
+    auto maxEle = std::max_element(completedData.begin(), completedData.end());
+    auto minEle = std::min_element(completedData.begin(), completedData.end());
+
+    // Calculate the absolute difference between the max and min values
+    double diff{ std::abs(*maxEle - *minEle) };
+
+    bool isPeak{ false };
 
     for (size_t i = 1; i < completedData.size() - 1; ++i) {
         // Check if the current data point is greater than both its adjacent points
@@ -268,17 +306,14 @@ bool detectBump(const std::deque<double>& completedData, double threshold){
     }
 
     // Check if the difference exceeds the threshold and if it is peak
-    if ((diff > threshold) && isPeak){
+    if ((diff > bumpThreshold) && isPeak){
         return true;
     }
 
     return false; // Return false if no bump is detected
 }
 
-
-
 int main(){
-
     // Initialize Active Filter
     ActiveFilter actFilter;
 
@@ -355,9 +390,7 @@ int main(){
     unsigned int removeSamples{ 0 };
 
     bool bumpDetected{ false };
-
-    // digitalWrite(ledPin, LOW);
-    // digitalWrite(onLedPin, HIGH);
+    bool potholeDetected{ false };
 
     currentConfig.setConfig(midSensitivityConfig);
 
@@ -365,8 +398,11 @@ int main(){
     Button potholeButton{ potholePin };
     Button modeButton{ modePin };
 
-    bool buttonPressed{ false };
-    std::chrono::time_point<std::chrono::high_resolution_clock> buttonPressTime;
+    bool modeButtonPressed{ false };
+    std::chrono::time_point<std::chrono::high_resolution_clock> modeButtonPressTime;
+
+    SequenceType previousSequence = SequenceType::Stable;
+    SequenceType currentSequence = SequenceType::Stable;
 
     while(true){
         // Record loop time stamp:
@@ -403,7 +439,10 @@ int main(){
         // Increment the sample number for the next iteration
         sampleNumber++;
 
+        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        // previousSequence = currentSequence; // Save the previous sequence
+        // SequenceType newSequence = SequenceType::Stable;
 
         if(outData.size() > wholeDequeSize){
 
@@ -412,66 +451,77 @@ int main(){
 
             if((sampleNumber % wholeDequeSize) == 0){
                 bumpDetected = false;
-                // digitalWrite(ledPin, LOW);
+                potholeDetected = false;
             }
-            
-            if (!bumpDetected && detectBump(outData, currentConfig.threshold)) { 
-                bumpDetected = true;
-                //digitalWrite(ledPin, HIGH);
-                ++activeCount;
-                rgbLed.bumpDetected();
-                std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
-                std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",count=" + std::to_string(activeCount);
-                TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+
+            // Update previousSequence before checking for hazards
+            previousSequence = currentSequence;
+
+            if (!bumpDetected && !potholeDetected) {
+
+                bool hazardFound = detectHazard(outData, currentConfig.bumpThreshold, currentConfig.potholeThreshold, currentSequence);
+
+                if (hazardFound){
+
+                    if(currentSequence != previousSequence){
+                        previousSequence = currentSequence;
+
+                        if(currentSequence == SequenceType::Rising){
+                            bumpDetected = true;
+                            rgbLed.bumpDetected();
+                            ++activeBumpCount;
+                            std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
+                            std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",bump_count=" + std::to_string(activeBumpCount);
+                            TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+                        }
+
+                        else if(currentSequence == SequenceType::Falling){
+                            potholeDetected = true;
+                            rgbLed.potholeDetected();
+                            ++activePotholeCount;
+                            std::cout << "Pothole detected at sample number: " << sampleNumber << std::endl;
+                            std::string potholeLog = ",sample=" + std::to_string(sampleNumber) + ",pothole_count=" + std::to_string(activePotholeCount);
+                            TLogger::TLogInfo(directoryPath, bumpCountLogFile, potholeLog);
+                        }
+                    }
+                }
+                else {
+                    // No hazard found, explicitly set to Stable if not already
+                    if (currentSequence != SequenceType::Stable) {
+                        currentSequence = SequenceType::Stable;
+                    }
+                }
             }
         }
-
-        
-
-
-        // ------------------------------------------------------------------------------------------------------
-
-        
-        // Check the button state
-        //modeButton.checkButton();
+        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         int modeButtonState{ modeButton.getButtonState() };
 
         // If the button is pressed and was not pressed in the previous iteration
-        if (modeButtonState && !buttonPressed) {
-            buttonPressed = true;
-            buttonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
+        if (modeButtonState && !modeButtonPressed) {
+            modeButtonPressed = true;
+            modeButtonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
         }
 
         // If the button is not pressed and was pressed in the previous iteration
-        else if (!modeButtonState && buttonPressed) {
-            buttonPressed = false;
+        else if (!modeButtonState && modeButtonPressed) {
+            modeButtonPressed = false;
             auto buttonReleaseTime = std::chrono::high_resolution_clock::now();
-            auto buttonPressDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buttonReleaseTime - buttonPressTime).count();
+            auto buttonPressDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buttonReleaseTime - modeButtonPressTime).count();
             std::cout << "Button was pressed for: " << buttonPressDuration << " ms" << std::endl;
 
             if(buttonPressDuration > buttonPressDurationThresholdMs){
                 currentConfig.setConfig(getNextConfig(currentConfig, rgbLed));
                 std::cout << "Configuration changed to: " << currentConfig.getConfigName() << std::endl;
             }
-    
         }
         
-
         // Update LED
         rgbLed.update();
         
-
-
-
-
         std::cout << sampleNumber << " " << currentConfig.getConfigStr() << "\n";
 
-
-
-
-
-
+        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         std::string logOut = 
         ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
@@ -487,30 +537,13 @@ int main(){
         
         TLogger::TLogInfo(directoryPath, allSensorLogFile, logOut);
 
+        std::cout << "prev: " << static_cast<int>(previousSequence) << " current: " << static_cast<int>(currentSequence) << "\n";
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         // Calculate Loop Duration
-
         auto endTime{ std::chrono::high_resolution_clock::now() };
         auto duration{ std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count() };
-
-        // std::cout << duration << std::endl;
-
 
         auto delayMs{ static_cast<long>(loopDurationMs - duration) } ;
 
@@ -520,7 +553,5 @@ int main(){
     
         dt = timeSync(startTime);
     }
-
-	return 0;
 }
 

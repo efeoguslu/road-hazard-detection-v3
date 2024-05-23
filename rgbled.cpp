@@ -37,7 +37,7 @@ void RgbLed::bumpDetected() {
     lastEventTime = std::chrono::steady_clock::now();
 }
 
-void RgbLed::pitDetected() {
+void RgbLed::potholeDetected() {
     currentEvent = Event::Pit;
     lastEventTime = std::chrono::steady_clock::now();
 }
