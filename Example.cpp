@@ -163,6 +163,7 @@ public:
 };
 
 // Pothole thresholds may be subject to change:
+// Pothole thresholds may be subject to change:
 
 SensitivityConfig lowSensitivityConfig{  "low",  0.25, 0.15 }; 
 SensitivityConfig midSensitivityConfig{  "mid",  0.12, 0.09 }; 
@@ -302,6 +303,7 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
     }
 }
 
+/*
 bool detectHazard(const std::deque<double>& completedData, double bumpThreshold, double potholeThreshold, SequenceType& sequenceType){
     
     if (completedData.size() < 3){
@@ -354,6 +356,7 @@ bool detectBump(const std::deque<double>& completedData, double bumpThreshold){
     double diff{ std::abs(*maxEle - *minEle) };
 
     bool isPeak{ false };
+    bool isPeak{ false };
 
     for (size_t i = 1; i < completedData.size() - 1; ++i) {
         // Check if the current data point is greater than both its adjacent points
@@ -364,11 +367,14 @@ bool detectBump(const std::deque<double>& completedData, double bumpThreshold){
 
     // Check if the difference exceeds the threshold and if it is peak
     if ((diff > bumpThreshold) && isPeak){
+    if ((diff > bumpThreshold) && isPeak){
         return true;
     }
 
     return false; // Return false if no bump is detected
 }
+*/
+
 
 
 SequenceType getStateChange(const std::deque<double>& states) {
@@ -679,9 +685,14 @@ int main(){
         if (modeButtonState && !modeButtonPressed) {
             modeButtonPressed = true;
             modeButtonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
+        if (modeButtonState && !modeButtonPressed) {
+            modeButtonPressed = true;
+            modeButtonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
         }
 
         // If the button is not pressed and was pressed in the previous iteration
+        else if (!modeButtonState && modeButtonPressed) {
+            modeButtonPressed = false;
         else if (!modeButtonState && modeButtonPressed) {
             modeButtonPressed = false;
             auto buttonReleaseTime = std::chrono::high_resolution_clock::now();
@@ -745,8 +756,6 @@ int main(){
 
         // Update LED
         rgbLed.update();
-
-
         
         // Calculate Loop Duration
         auto endTime{ std::chrono::high_resolution_clock::now() };
@@ -760,6 +769,8 @@ int main(){
     
         dt = timeSync(startTime);
     }
+
+
 
     std::cout << "recording ended\n";
     endBlinkLed(5);
