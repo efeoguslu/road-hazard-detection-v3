@@ -1,7 +1,8 @@
 #include "sequence.h"
 
+
 // Function to calculate the trend of a given window
-SequenceType calculateTrend(const std::deque<double>& window) {
+SequenceType getSequenceType(const std::deque<double>& window) {
     double sum = 0.0;
     for (size_t i = 1; i < window.size(); ++i) {
         sum += window[i] - window[i - 1];
@@ -12,9 +13,19 @@ SequenceType calculateTrend(const std::deque<double>& window) {
 }
 
 
+double calculateTrend(const std::deque<double>& window) {
+    double sum = 0.0;
+    for (size_t i = 1; i < window.size(); ++i) {
+        sum += window[i] - window[i - 1];
+    }
+    return sum;
+}
+
+/*
 // Function to classify the signal in real-time
-SequenceType classifySignalRealtime(const std::deque<double>& signal, size_t windowSize) {
+SequenceType classifySignalRealTime(const std::deque<double>& signal, size_t windowSize) {
     if (signal.size() < windowSize) return SequenceType::None;
     std::deque<double> window(signal.end() - windowSize, signal.end());
     return calculateTrend(window);
 }
+*/

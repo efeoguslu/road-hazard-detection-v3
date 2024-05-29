@@ -6,16 +6,14 @@
 #include <string>
 
 enum class SequenceType {
-    Rising,
-    Falling,
-    Stable,
+    Rising,  // 0
+    Falling, // 1
+    Stable,  // 2
     None
 };
 
-
-
-
-SequenceType calculateTrend(const std::deque<double>& window);
-SequenceType classifySignalRealtime(const std::deque<double>& signal, size_t windowSize);
+SequenceType getSequenceType(const std::deque<double>& window);
+double calculateTrend(const std::deque<double>& window);
+// SequenceType classifySignalRealTime(const std::deque<double>& signal, size_t windowSize);
 
 #endif

@@ -1,5 +1,6 @@
 /logs/*.txt
 /logs/*.nmea
+logs/
 detection.o
 button.o
 Example.o

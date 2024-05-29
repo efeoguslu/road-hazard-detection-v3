@@ -11,7 +11,10 @@ const int bumpPin{ 19 };
 const int potholePin{ 26 };
 const int modePin{ 13 };
 
+const int endRecordingPin{ 6 };
+
 const int buttonPressDurationThresholdMs{ 1000 };
+const int endButtonPressDurationThresholdMs{ 3000 };
 
 
 class Button {

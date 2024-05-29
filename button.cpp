@@ -3,7 +3,7 @@
 // #include "sensitivity.h"
 
 void Button::checkButton() {
-        unsigned int buttonState = digitalRead(pin) == LOW ? 0 : 1;
+        unsigned int buttonState = digitalRead(pin) == LOW ? 1 : 0;
 
         // If the button is pressed and was not pressed in the previous iteration
         if (buttonState && !pressed) {
@@ -21,10 +21,10 @@ void Button::checkButton() {
 }
 
 std::string Button::getButtonStateStr() {
-        return (digitalRead(pin) == LOW ? "0" : "1");
+        return (digitalRead(pin) == LOW ? "1" : "0");
 }
 
 
 int Button::getButtonState() {
-        return (digitalRead(pin) == LOW ? 0 : 1);
+        return (digitalRead(pin) == LOW ? 1 : 0);
 }

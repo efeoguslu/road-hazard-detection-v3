@@ -6,6 +6,7 @@
 
 const int configChangeLedDelayMs{ 400 };
 const int hazardChangeLedDelayMs{ 1000 };
+const int endRecordingLedDelayMs{ 200 };
 
 const int redPinNumber{ 21 };
 const int greenPinNumber{ 20 };
@@ -17,7 +18,7 @@ public:
     RgbLed(int redPin, int greenPin, int bluePin);
 
     void bumpDetected();
-    void pitDetected();
+    void potholeDetected();
     void configurationChanged(int configNumber);
 
     void update();
@@ -40,6 +41,7 @@ private:
 
     int blinkCount;
     int blinkState;
+
 };
 
 

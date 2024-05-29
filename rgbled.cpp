@@ -37,7 +37,7 @@ void RgbLed::bumpDetected() {
     lastEventTime = std::chrono::steady_clock::now();
 }
 
-void RgbLed::pitDetected() {
+void RgbLed::potholeDetected() {
     currentEvent = Event::Pit;
     lastEventTime = std::chrono::steady_clock::now();
 }
@@ -49,7 +49,6 @@ void RgbLed::configurationChanged(int blinks) {
     blinkState = 0;
     lastEventTime = std::chrono::steady_clock::now();
 }
-
 
 void RgbLed::update() {
     auto now = std::chrono::steady_clock::now();
@@ -92,7 +91,6 @@ void RgbLed::update() {
                 }
             }
             break;
-        
         
         default:
             RgbLed::resetColor();
