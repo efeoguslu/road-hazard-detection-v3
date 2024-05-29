@@ -16,8 +16,6 @@
 #include <unordered_map>
 #include <iterator>
 
-
-
 #include "MPU6050.h"
 #include "filters.h"
 #include "button.h"
@@ -693,6 +691,7 @@ int main(){
         // If the button is not pressed and was pressed in the previous iteration
         else if (!modeButtonState && modeButtonPressed) {
             modeButtonPressed = false;
+        }
         else if (!modeButtonState && modeButtonPressed) {
             modeButtonPressed = false;
             auto buttonReleaseTime = std::chrono::high_resolution_clock::now();
