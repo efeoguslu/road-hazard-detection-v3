@@ -62,6 +62,12 @@ void ActiveFilter::setOffset(double offset = 1.0)
     this->m_offset = offset;
 }
 
+void ActiveFilter::setCoefficients(double posCoef, double negCoef)
+{
+    this->m_posCoef = posCoef;
+    this->m_negCoef = negCoef;
+}
+
 void ActiveFilter::feedData(double data)
 {
     this->m_newData.push_back(data-this->m_offset); //reduce offset value in order to keep signal around 0
@@ -88,12 +94,12 @@ void ActiveFilter::feedData(double data)
     }
 }
 
-long unsigned int ActiveFilter::getCompletedDataSize()
+long unsigned int ActiveFilter::getCompletedDataSize()const
 {
     return this->m_completedData.size();
 }
 
-std::deque<double> ActiveFilter::getCompletedData()
+std::deque<double> ActiveFilter::getCompletedData()const
 {    
     // temporary copy for return
     std::deque<double> retData(this->m_completedData);

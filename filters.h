@@ -37,14 +37,14 @@ private:
     // https://stackoverflow.com/questions/5563952/why-there-is-no-pop-front-method-in-c-stdvector
     // http://adrinael.net/containerchoice 
 
-    double m_posCoef     = 1.6; // was 1.4 before, but 1.2 was written in Python analysis
-    double m_negCoef     = 0.1;
-    double m_threshold   = 0.2; // was 0.15 before, 0.5 is more suitable after analysis
+    double m_posCoef; // was 1.4 before, but 1.2 was written in Python analysis
+    double m_negCoef;
+    double m_threshold; // was 0.15 before, 0.5 is more suitable after analysis
     double m_offset      = 1.0;      //signal offset
     bool  m_dataInit    = false;
     std::deque<double> m_data;  //size: windowSize
     std::deque<double> m_newData; // size: windowSize-overlapSize
-    std::deque<double> m_completedData; // completed data , no more operations will be done on there
+    mutable std::deque<double> m_completedData; // completed data , no more operations will be done on there
 
     // |_______||__overlap___||__newdata__|
     // |---------window-------|
@@ -56,10 +56,11 @@ public:
     void                setWindowParameters(int windowSize, int overlapSize);
     void                setThreshold(double threshold);
     void                setOffset(double offset);
+    void                setCoefficients(double posCoef, double negCoef);
     void                feedData(double data);
-    long unsigned int   getCompletedDataSize();
-    std::deque<double>  getCompletedData();     // maybe return can be changed as vector / queue 
-    int                getDiffSize();
+    long unsigned int   getCompletedDataSize()const;
+    std::deque<double>  getCompletedData()const;     // maybe return can be changed as vector / queue 
+    int                 getDiffSize();
 
 private:
     void                initMembers();

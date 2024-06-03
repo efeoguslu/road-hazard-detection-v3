@@ -28,7 +28,6 @@
 typedef unsigned int uint;
 typedef std::deque<double>::iterator deque_iter_double;
 
-
 class VectorStats {
 public:
     VectorStats(deque_iter_double start_iter, deque_iter_double end_iter) {
@@ -101,8 +100,86 @@ std::deque<double> z_score_thresholding(std::deque<double> input, int lag, doubl
 
 
 
+/*
+typedef unsigned int uint;
+using deque_iter_double = std::deque<double>::iterator;
+
+class VectorStats {
+public:
+    VectorStats(deque_iter_double start_iterator, deque_iter_double end_iterator) {
+        this->start = start_iterator;
+        this->end = end_iterator;
+        this->compute();
+    }
+
+    void compute() {
+        double sum = std::accumulate(start, end, 0.0);
+        uint slice_size = std::distance(start, end);
+        double mean = sum / slice_size;
+        std::vector<double> diff(slice_size);
+        std::transform(start, end, diff.begin(), [mean](double x) { return x - mean; });
+        double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+        double std_dev = std::sqrt(sq_sum / slice_size);
+
+        this->m1 = mean;
+        this->m2 = std_dev;
+    }
+
+    double mean() const {
+        return m1;
+    }
+
+    double standard_deviation() const {
+        return m2;
+    }
+
+private:
+    deque_iter_double start;
+    deque_iter_double end;
+    double m1;
+    double m2;
+};
+
+std::deque<double> z_score_thresholding(std::deque<double> input, int lag, double threshold, double influence) {
+    uint n = static_cast<uint>(input.size());
+    std::deque<double> signals(n, 0.0);
+    std::deque<double> filtered_input = input;
+    std::deque<double> filtered_mean(n);
+    std::deque<double> filtered_stddev(n);
+
+    VectorStats lag_subvector_stats(input.begin(), input.begin() + lag);
+    filtered_mean[lag - 1] = lag_subvector_stats.mean();
+    filtered_stddev[lag - 1] = lag_subvector_stats.standard_deviation();
+
+    double sum = std::accumulate(input.begin(), input.begin() + lag, 0.0);
+    double sum_sq = std::inner_product(input.begin(), input.begin() + lag, input.begin(), 0.0);
+
+    for (int i = lag; i < n; i++) {
+        double mean = sum / lag;
+        double variance = (sum_sq / lag) - (mean * mean);
+        double std_dev = std::sqrt(variance);
+
+        if (std::abs(input[i] - mean) > threshold * std_dev) {
+            signals[i] = (input[i] > mean) ? 1.0 : -1.0;
+            filtered_input[i] = influence * input[i] + (1 - influence) * filtered_input[i - 1];
+        } else {
+            signals[i] = 0.0;
+            filtered_input[i] = input[i];
+        }
+
+        // Update the sum and sum of squares incrementally
+        sum += filtered_input[i] - filtered_input[i - lag];
+        sum_sq += filtered_input[i] * filtered_input[i] - filtered_input[i - lag] * filtered_input[i - lag];
+    }
+
+    return signals;
+}
+*/
+
+
+
 const unsigned int lag{ 50 };
-const double threshold{ 9.0 }; // ulaş abi kaydı 10.0 idi
+const double z_score_threshold{ 10.0 }; // ulaş abi kaydı 10.0 idi
 const double influence{ 0.25 };
 
 
@@ -129,8 +206,6 @@ static int activePotholeCount{ 0 };
 
 // ----------------------------------------------------------------------------------------------
 
-ThreeAxisIIR iirFiltAccel;
-ThreeAxisIIR iirFiltGyro;
 
 // ----------------------------------------------------------------------------------------------
 
@@ -301,141 +376,24 @@ void AppendDeque(std::deque<double> &target, std::deque<double> source)
     }
 }
 
-/*
-bool detectHazard(const std::deque<double>& completedData, double bumpThreshold, double potholeThreshold, SequenceType& sequenceType){
-    
-    if (completedData.size() < 3){
-        return false; // Not enough data points to detect a peak
-    }
-
-    // Find the maximum and minimum values in the deque
-    auto maxEle = std::max_element(completedData.begin(), completedData.end());
-    auto minEle = std::min_element(completedData.begin(), completedData.end());
-
-    // Calculate the absolute difference between the max and min values
-    double diff{ std::abs(*maxEle - *minEle) };
-
-    bool isPeak{ false };
-    bool isDip{ false };
-
-    for (size_t i = 1; i < completedData.size() - 1; ++i) {
-
-        // Check if the current data point is greater than both its adjacent points
-        if ((completedData[i] > completedData[i - 1]) && (completedData[i] > completedData[i + 1])){
-            isPeak = true;
-        }
-
-        // Check if the current data point is less than both its adjacent points (dip)
-        else if ((completedData[i] < completedData[i - 1]) && (completedData[i] < completedData[i + 1])){
-            isDip = true;
-        }
-    }
-
-    sequenceType = getSequenceType(completedData);
-
-    if ((isPeak && (diff > bumpThreshold)) || (isDip && (diff > potholeThreshold))){
-        return true; // Bump or Pothole detected
-    }
-    
-    return false; // Return false if no bump or pothole is detected
-}
-
-bool detectBump(const std::deque<double>& completedData, double bumpThreshold){
-    
-    if (completedData.size() < 3){
-        return false; // Not enough data points to detect a peak
-    }
-
-    // Find the maximum and minimum values in the deque
-    auto maxEle = std::max_element(completedData.begin(), completedData.end());
-    auto minEle = std::min_element(completedData.begin(), completedData.end());
-
-    // Calculate the absolute difference between the max and min values
-    double diff{ std::abs(*maxEle - *minEle) };
-
-    bool isPeak{ false };
-    bool isPeak{ false };
-
-    for (size_t i = 1; i < completedData.size() - 1; ++i) {
-        // Check if the current data point is greater than both its adjacent points
-        if ((completedData[i] > completedData[i - 1]) && (completedData[i] > completedData[i + 1])){
-            isPeak = true;
-        }
-    }
-
-    // Check if the difference exceeds the threshold and if it is peak
-    if ((diff > bumpThreshold) && isPeak){
-    if ((diff > bumpThreshold) && isPeak){
-        return true;
-    }
-
-    return false; // Return false if no bump is detected
-}
-*/
-
-
 
 SequenceType getStateChange(const std::deque<double>& states) {
     if (states.size() < 2) {
         return SequenceType::Stable;
     }
 
-    enum State { STABLE, RISING, FALLING, UNKNOWN } currentState = STABLE;
-
     for (size_t i = 1; i < states.size(); ++i) {
-        if (currentState == STABLE) {
-            if (states[i-1] == 0) {
-                if (states[i] == 1) {
-                    currentState = RISING;
-                } else if (states[i] == -1) {
-                    currentState = FALLING;
-                }
-            }
-        } else if (currentState == RISING) {
+        if (states[i] == 0) {
             if (states[i-1] == 1) {
-                if (states[i] == 0) {
-                    return SequenceType::Rising;
-                } else if (states[i] == -1) {
-                    currentState = FALLING;
-                }
-            }
-        } else if (currentState == FALLING) {
-            if (states[i-1] == -1) {
-                if (states[i] == 0) {
-                    return SequenceType::Falling;
-                } else if (states[i] == 1) {
-                    currentState = RISING;
-                }
+                return SequenceType::Rising;
+            } else if (states[i-1] == -1) {
+                return SequenceType::Falling;
             }
         }
     }
 
     return SequenceType::Stable;
 }
-
-
-/*
-SequenceType getStateChange(const std::deque<double>& states) {
-    if (states.size() < 2) {
-        // std::cout << "Not enough data to detect state changes." << std::endl;
-    }
-    for(size_t i = 0; i < states.size(); ++i){
-
-        if(i + 1 < states.size()){
-
-            if(states[i] == 0 && states[i + 1] == 1){
-                return SequenceType::Rising;
-            }
-
-            if(states[i] == 0 && states[i + 1] == -1){
-                return SequenceType::Falling;
-            }
-        }        
-    }
-
-    return SequenceType::Stable;
-}
-*/
 
 
 void endBlinkLed(int numBlinks) {
@@ -446,25 +404,6 @@ void endBlinkLed(int numBlinks) {
         std::this_thread::sleep_for(std::chrono::milliseconds(endRecordingLedDelayMs));
     }
 }
-
-/*
-void saveSignalToFile(const std::deque<double>& signalDeque, const std::string& filename, int batchSize) {
-    static std::deque<double> lastSavedSignal;
-    std::ofstream outFile(filename, std::ios_base::app);
-
-    // Calculate the range of new samples
-    int newSamplesStart = std::max(0, static_cast<int>(lastSavedSignal.size()) - batchSize);
-    int newSamplesEnd = signalDeque.size();
-
-    // Append new samples to the file
-    for (int i = newSamplesStart; i < newSamplesEnd; ++i) {
-        outFile << signalDeque[i] << "\n";
-    }
-
-    // Update the lastSavedSignal to current deque
-    lastSavedSignal.assign(signalDeque.end() - batchSize, signalDeque.end());
-}
-*/
 
 void saveDequeToFile(const std::deque<double>& signal, const std::string& filename){
     std::ofstream outFile(filename, std::ios_base::app);
@@ -477,16 +416,80 @@ void saveDequeToFile(const std::deque<double>& signal, const std::string& filena
 }
 
 
+template<typename T>
+void appendIfNotEmpty(const T& filterConfigured, std::deque<double>& output1, std::deque<double>& output2) {
+    if (filterConfigured.getCompletedDataSize() > 0) {
+        std::deque<double> completedData = filterConfigured.getCompletedData();
+        AppendDeque(output1, completedData);
+        AppendDeque(output2, completedData);
+    }
+}
+
+void removeExcessSamples(std::deque<double>& outData, int size) {
+    if (outData.size() > size) {
+        unsigned int remove = static_cast<unsigned int>(outData.size() - size);
+        outData.erase(outData.begin(), outData.begin() + remove);
+    }
+}
+
+void applyZScoreThresholding(const std::deque<double>& outData, std::deque<double>& sequenceDeque, int size, unsigned int lag, double z_score_threshold, double influence){
+    if (outData.size() == size) {
+        sequenceDeque = z_score_thresholding(outData, lag, z_score_threshold, influence);
+    }
+}
+
+void determineState(const std::deque<double>& sequenceDeque, std::deque<int>& stateDeque){
+    if (getStateChange(sequenceDeque) == SequenceType::Rising) {
+        stateDeque.push_back(1);
+    }
+    if (getStateChange(sequenceDeque) == SequenceType::Falling) {
+        stateDeque.push_back(-1);
+    }
+    if (getStateChange(sequenceDeque) == SequenceType::Stable) {
+        stateDeque.push_back(0);
+    }
+}
+
 
 
 int main(){
+
     // Initialize Active Filter
+    /*
     ActiveFilter actFilter;
 
     // These parameters are subject to testing
     actFilter.setWindowParameters(50, 35);
     actFilter.setThreshold(0.2); // was 0.25 before
+    */
 
+   // Initialize Active Filters
+    
+    int activeFilterWindowSize{ 50 };
+    int activeFilterOverlapSize{ 35 };
+
+    ActiveFilter actFilterBumpConfigured;
+    double bumpActiveFilterThreshold{ 0.19 };
+    double bumpActiveFilterPositiveCoef{ 1.7 };
+    double bumpActiveFilterNegativeCoef{ 0.7 }; 
+    // Parameters for the Bump Active Filter
+    actFilterBumpConfigured.setWindowParameters(activeFilterWindowSize, activeFilterOverlapSize);
+    actFilterBumpConfigured.setThreshold(bumpActiveFilterThreshold);
+    actFilterBumpConfigured.setCoefficients(bumpActiveFilterPositiveCoef, bumpActiveFilterNegativeCoef);
+
+
+    ActiveFilter actFilterPotholeConfigured;
+    double potholeActiveFilterThreshold{ 0.18 };
+    double potholeActiveFilterPositiveCoef{ 1.9 };
+    double potholeActiveFilterNegativeCoef{ 0.1 }; 
+    // Parameters for the Pothole Active Filter
+    actFilterPotholeConfigured.setWindowParameters(activeFilterWindowSize, activeFilterOverlapSize);
+    actFilterPotholeConfigured.setThreshold(potholeActiveFilterThreshold);
+    actFilterPotholeConfigured.setCoefficients(potholeActiveFilterPositiveCoef, potholeActiveFilterNegativeCoef);
+    
+    // Initialize IIR Filter
+    ThreeAxisIIR iirFiltAccel;
+    ThreeAxisIIR iirFiltGyro;
     ThreeAxisIIR_Init(&iirFiltAccel, filterAlpha);
     ThreeAxisIIR_Init(&iirFiltGyro, filterAlpha);
 
@@ -496,7 +499,7 @@ int main(){
     RgbLed rgbLed{ redPinNumber, greenPinNumber, bluePinNumber };
 
     // Setup the pin as output
-    //pinMode(ledPin, OUTPUT);
+    // pinMode(ledPin, OUTPUT);
     // pinMode(detectLedPin, OUTPUT);
 
     pinMode(programOnLedPin, OUTPUT);
@@ -516,12 +519,31 @@ int main(){
     double gr_rotated{0},  gp_rotated{0},  gy_rotated{0};
 
     // Initialize output deque
+
+    /*
     std::deque<double> outData;
     outData.clear();
 
     std::deque<double> state;
     state.clear();
+    */
 
+    std::deque<double> outBumpData;
+    outBumpData.clear();
+    std::deque<double> outPotholeData;
+    outPotholeData.clear();
+
+    std::deque<double> sequenceBumpDeque;
+    sequenceBumpDeque.clear();
+    std::deque<double> sequencePotholeDeque;
+    sequencePotholeDeque.clear();
+
+    std::deque<int> stateBumpDeque;
+    stateBumpDeque.clear();
+    std::deque<int> statePotholeDeque;
+    statePotholeDeque.clear();
+
+    
     sleep(1); // Wait for the system clock to get ready
 
     const std::string timestamp = getCurrentTimestamp();
@@ -560,13 +582,9 @@ int main(){
     // outData deque size is fixed value for now:
     const unsigned int wholeDequeSize{ 150 }; // was 150 before
 
-    // Initialization of number of samples to be removed:
-    unsigned int removeSamples{ 0 };
+    
 
-    // bool bumpDetected{ false };
-    // bool potholeDetected{ false };
-
-    currentConfig.setConfig(midSensitivityConfig);
+    // currentConfig.setConfig(midSensitivityConfig);
 
     Button bumpButton{ bumpPin };
     Button potholeButton{ potholePin };
@@ -580,8 +598,14 @@ int main(){
     std::chrono::time_point<std::chrono::high_resolution_clock> modeButtonPressTime;
     std::chrono::time_point<std::chrono::high_resolution_clock> endRecordingButtonPressTime;
 
-    // SequenceType previousSequence = SequenceType::Stable;
-    // SequenceType currentSequence = SequenceType::Stable;
+
+    std::deque<double> activeFilterBumpOutput;
+    activeFilterBumpOutput.clear();
+
+    std::deque<double> activeFilterPotholeOutput;
+    activeFilterPotholeOutput.clear();
+
+
 
     while(true){
         // Record loop time stamp:
@@ -589,76 +613,47 @@ int main(){
 
         // Get the current accelerometer values:
         device.getAccel(&ax, &ay, &az);
-        // Get the filtered accelerometer values:
-        ThreeAxisIIR_Update(&iirFiltAccel, ax, ay, az, &ax_filtered, &ay_filtered, &az_filtered);
-
         // Get the current gyroscope values:
         device.getGyro(&gr, &gp, &gy);
+
+        // Get the filtered accelerometer values:
+        ThreeAxisIIR_Update(&iirFiltAccel, ax, ay, az, &ax_filtered, &ay_filtered, &az_filtered);        
         // Get the filtered gyroscope values:
         ThreeAxisIIR_Update(&iirFiltGyro, gr, gp, gy, &gr_filtered, &gp_filtered, &gy_filtered);
 
         // Get the current roll and pitch angles using complementary filter:
         complementaryFilter(ax_filtered, ay_filtered, az_filtered, gr_filtered, gp_filtered, gy_filtered, &rollAngle, &pitchAngle);
 
-
         // Rotation:
         rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, ax_filtered, ay_filtered, az_filtered, &ax_rotated, &ay_rotated, &az_rotated);
-        rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, gr_filtered, gp_filtered, gy_filtered, &gr_rotated, &gp_rotated, &gy_rotated);
+        //rotateAll(rollAngle*degreesToRadians, pitchAngle*degreesToRadians, gr_filtered, gp_filtered, gy_filtered, &gr_rotated, &gp_rotated, &gy_rotated);
 
         // Calculate Rotated Compound Acceleration Vector:
         compoundAccelerationVector = compoundVector(ax_rotated, ay_rotated, az_rotated);
         
         // Apply Active Filter:
-        actFilter.feedData(compoundAccelerationVector);
 
-        if(actFilter.getCompletedDataSize() > 0){
-            std::deque<double> completedData = actFilter.getCompletedData();
-            AppendDeque(outData, completedData);        
-        }
+        actFilterBumpConfigured.feedData(compoundAccelerationVector);
+        actFilterPotholeConfigured.feedData(compoundAccelerationVector);
+
+        appendIfNotEmpty(actFilterBumpConfigured, outBumpData, activeFilterBumpOutput);
+        appendIfNotEmpty(actFilterPotholeConfigured, outPotholeData, activeFilterPotholeOutput);
+        
+        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        removeExcessSamples(outBumpData, wholeDequeSize);
+        removeExcessSamples(outPotholeData, wholeDequeSize);
+        
+        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        applyZScoreThresholding(outBumpData, sequenceBumpDeque, wholeDequeSize, lag, z_score_threshold, influence);
+        applyZScoreThresholding(outPotholeData, sequencePotholeDeque, wholeDequeSize, lag, z_score_threshold, influence);
+
+
 
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // previousSequence = currentSequence; // Save the previous sequence
-        // SequenceType newSequence = SequenceType::Stable;
-
-        if(outData.size() > wholeDequeSize){
-            removeSamples = static_cast<unsigned int>(outData.size() - wholeDequeSize);
-            outData.erase(outData.begin(), outData.begin() + removeSamples);
-        }
-
-        // Increment the sample number for the next iteration
-        sampleNumber++;
-
-        
-        // std::cout << "iteration: " <<  sampleNumber << " size of outData: " << outData.size() << std::endl;
-        
-        /*
-        std::cout << "outData:";
-        for(int i = 0; i < outData.size(); ++i){
-            std::cout << outData[i] << " ";
-        }
-
-        std::cout << "\n";
-        */
-        
-        
-        
-        
-        
-        
-        
-
-
-
-        if(outData.size() == wholeDequeSize){
-            state = z_score_thresholding(outData, lag, threshold, influence);
-
-        }
-
-        
-        // std::cout << "state: " << static_cast<int>(getStateChange(state)) << std::endl;
-
-        if(getStateChange(state) == SequenceType::Rising){
+        if (getStateChange(sequenceBumpDeque) == SequenceType::Rising) {
             rgbLed.bumpDetected();
             ++activeBumpCount;
             //std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
@@ -666,15 +661,14 @@ int main(){
             TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
         }
 
-        if(getStateChange(state) == SequenceType::Falling){
+        if (getStateChange(sequencePotholeDeque) == SequenceType::Falling) {
             rgbLed.potholeDetected();
             ++activePotholeCount;
             //std::cout << "Pothole detected at sample number: " << sampleNumber << std::endl;
             std::string potholeLog = ",sample=" + std::to_string(sampleNumber) + ",pothole_count=" + std::to_string(activePotholeCount);
             TLogger::TLogInfo(directoryPath, bumpCountLogFile, potholeLog);
         }
-    
-        
+       
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         int modeButtonState{ modeButton.getButtonState() };
@@ -683,15 +677,9 @@ int main(){
         if (modeButtonState && !modeButtonPressed) {
             modeButtonPressed = true;
             modeButtonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
-        if (modeButtonState && !modeButtonPressed) {
-            modeButtonPressed = true;
-            modeButtonPressTime = std::chrono::high_resolution_clock::now(); // Record the time when the button is pressed
         }
 
         // If the button is not pressed and was pressed in the previous iteration
-        else if (!modeButtonState && modeButtonPressed) {
-            modeButtonPressed = false;
-        }
         else if (!modeButtonState && modeButtonPressed) {
             modeButtonPressed = false;
             auto buttonReleaseTime = std::chrono::high_resolution_clock::now();
@@ -706,12 +694,6 @@ int main(){
 
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         
-        // Increment the sample number for the next iteration
-        // sampleNumber++;
-        // std::cout << "iteration: " <<  sampleNumber << " size of outData: " << outData.size() << std::endl;
-
-        // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        
         
         std::string logOut = 
         ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
@@ -722,7 +704,7 @@ int main(){
         ",gr_rotated="+std::to_string(gr_rotated)+",gp_rotated="+std::to_string(gp_rotated)+",gy_rotated="+std::to_string(gy_rotated)+\
         ",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+std::to_string(pitchAngle)+\
         ",comp_vector="+std::to_string(compoundAccelerationVector)+\
-        ",state="+std::to_string(static_cast<int>(getStateChange(state)))+\
+        ",state_bump="+std::to_string(static_cast<int>(getStateChange(sequenceBumpDeque)))+",state_pothole="+std::to_string(static_cast<int>(getStateChange(sequencePotholeDeque)))+\
         ",pothole_button_state="+potholeButton.getButtonStateStr()+",bump_button_state="+bumpButton.getButtonStateStr()+",mode_button_state="+modeButton.getButtonStateStr();
 
         
@@ -753,6 +735,11 @@ int main(){
         }
 
 
+
+
+        // Increment the sample number for the next iteration
+        sampleNumber++;
+
         // Update LED
         rgbLed.update();
         
@@ -769,6 +756,7 @@ int main(){
         dt = timeSync(startTime);
     }
 
+    
 
 
     std::cout << "recording ended\n";
