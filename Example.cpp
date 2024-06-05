@@ -396,6 +396,38 @@ SequenceType getStateChange(const std::deque<double>& states) {
 }
 
 
+EventType getStateChangeBump(const std::deque<double>& states) {
+    if (states.size() < 2) {
+        return EventType::Stable;
+    }
+
+    for (size_t i = 1; i < states.size(); ++i) {
+        if (states[i] == 0) {
+            if (states[i-1] == 1) {
+                return EventType::Bump;
+            }
+        }
+    }
+
+    return EventType::Stable;
+}
+
+EventType getStateChangePothole(const std::deque<double>& states) {
+    if (states.size() < 2) {
+        return EventType::Stable;
+    }
+
+    for (size_t i = 1; i < states.size(); ++i) {
+        if (states[i] == 0) {
+            if (states[i-1] == -1) {
+                return EventType::Pothole;
+            }
+        }
+    }
+
+    return EventType::Stable;
+}
+
 void endBlinkLed(int numBlinks) {
     for (int i = 0; i < numBlinks; ++i) {
         digitalWrite(programOnLedPin, HIGH); // Turn the LED on
@@ -454,20 +486,17 @@ void determineState(const std::deque<double>& sequenceDeque, std::deque<int>& st
 
 int main(){
 
-    // Initialize Active Filter
-    /*
-    ActiveFilter actFilter;
-
-    // These parameters are subject to testing
-    actFilter.setWindowParameters(50, 35);
-    actFilter.setThreshold(0.2); // was 0.25 before
-    */
 
    // Initialize Active Filters
     
     int activeFilterWindowSize{ 50 };
     int activeFilterOverlapSize{ 35 };
 
+    double activeFilterThreshold{ 0.2 };
+    double activeFilterPositiveCoefficient{ 1.6 };
+    double activeFilterNegativeCoefficient{ 0.1 };
+
+    /*
     ActiveFilter actFilterBumpConfigured;
     double bumpActiveFilterThreshold{ 0.19 };
     double bumpActiveFilterPositiveCoef{ 1.7 };
@@ -486,6 +515,19 @@ int main(){
     actFilterPotholeConfigured.setWindowParameters(activeFilterWindowSize, activeFilterOverlapSize);
     actFilterPotholeConfigured.setThreshold(potholeActiveFilterThreshold);
     actFilterPotholeConfigured.setCoefficients(potholeActiveFilterPositiveCoef, potholeActiveFilterNegativeCoef);
+    */
+
+
+
+    // Initialize Active Filter
+    
+    ActiveFilter actFilter;
+
+    // These parameters are subject to testing
+    actFilter.setWindowParameters(activeFilterWindowSize, activeFilterOverlapSize);
+    actFilter.setThreshold(activeFilterThreshold); // was 0.25 before
+    actFilter.setCoefficients(activeFilterPositiveCoefficient, activeFilterNegativeCoefficient);
+
     
     // Initialize IIR Filter
     ThreeAxisIIR iirFiltAccel;
@@ -506,28 +548,31 @@ int main(){
     digitalWrite(programOnLedPin, HIGH);
 
     // Variables to store the accel, gyro and angle values
-    double ax{0}, ay{0}, az{0};
-    double gr{0}, gp{0}, gy{0};
+    double ax{0.0}, ay{0.0}, az{0.0};
+    double gr{0.0}, gp{0.0}, gy{0.0};
 
     // Variables to store the filtered/rotated acceleration values
-    double ax_filtered{0}, ay_filtered{0}, az_filtered{0};                         
-    double ax_rotated{0},  ay_rotated{0},  az_rotated{0};
+    double ax_filtered{0.0}, ay_filtered{0.0}, az_filtered{0.0};                         
+    double ax_rotated{0.0},  ay_rotated{0.0},  az_rotated{0.0};
 
     // Variables to store the filtered/rotated gyroscope values
 
-    double gr_filtered{0}, gp_filtered{0}, gy_filtered{0};
-    double gr_rotated{0},  gp_rotated{0},  gy_rotated{0};
+    double gr_filtered{0.0}, gp_filtered{0.0}, gy_filtered{0.0};
+    double gr_rotated{0.0},  gp_rotated{0.0},  gy_rotated{0.0};
 
     // Initialize output deque
 
-    /*
+    
     std::deque<double> outData;
     outData.clear();
 
-    std::deque<double> state;
-    state.clear();
-    */
+    std::deque<double> sequenceDeque;
+    sequenceDeque.clear();
 
+    std::deque<double> stateDeque;
+    stateDeque.clear();
+    
+    /*
     std::deque<double> outBumpData;
     outBumpData.clear();
     std::deque<double> outPotholeData;
@@ -537,11 +582,17 @@ int main(){
     sequenceBumpDeque.clear();
     std::deque<double> sequencePotholeDeque;
     sequencePotholeDeque.clear();
+    */
+    
 
+
+    /*
     std::deque<int> stateBumpDeque;
     stateBumpDeque.clear();
     std::deque<int> statePotholeDeque;
     statePotholeDeque.clear();
+    */
+    
 
     
     sleep(1); // Wait for the system clock to get ready
@@ -550,9 +601,8 @@ int main(){
     const std::string directoryPath = "/home/efeoguslu/Desktop/road-hazard-detection-v3/logs/" + timestamp + "/";
     const std::string allSensorLogFile = "allSensorLogFile.txt";
     const std::string bumpCountLogFile = "bumpCountLogFile.txt";
+    const std::string configurationFile = "configurationFile.txt";
 
-    const std::string activeFilterLogFile = "activeFilterLogFile.txt";
-    const std::string zThresholdLogFile = "zThresholdLogFile.txt";
     
     if (!createDirectory(directoryPath)) {
         std::cerr << "Error: Unable to create directory." << std::endl;
@@ -598,12 +648,24 @@ int main(){
     std::chrono::time_point<std::chrono::high_resolution_clock> modeButtonPressTime;
     std::chrono::time_point<std::chrono::high_resolution_clock> endRecordingButtonPressTime;
 
-
+    /*
     std::deque<double> activeFilterBumpOutput;
     activeFilterBumpOutput.clear();
 
     std::deque<double> activeFilterPotholeOutput;
     activeFilterPotholeOutput.clear();
+    */
+    
+    std::deque<double> activeFilterOutput;
+    activeFilterOutput.clear();
+
+
+    std::string configuration = 
+        ",lag="+std::to_string(lag)+",z_score_threshold="+std::to_string(z_score_threshold)+",influence="+std::to_string(influence)+\
+        ",activeFilterWindowSize="+std::to_string(activeFilterWindowSize)+",activeFilterOverlapSize="+std::to_string(activeFilterOverlapSize)+\
+        ",activeFilterThreshold="+std::to_string(activeFilterThreshold)+",activeFilterPositiveCoef="+std::to_string(activeFilterPositiveCoefficient)+",activeFilterNegativeCoef="+std::to_string(activeFilterNegativeCoefficient);
+
+    TLogger::TLogInfo(directoryPath, configurationFile, configuration);
 
 
 
@@ -633,26 +695,37 @@ int main(){
         
         // Apply Active Filter:
 
-        actFilterBumpConfigured.feedData(compoundAccelerationVector);
-        actFilterPotholeConfigured.feedData(compoundAccelerationVector);
+        actFilter.feedData(compoundAccelerationVector);
 
-        appendIfNotEmpty(actFilterBumpConfigured, outBumpData, activeFilterBumpOutput);
-        appendIfNotEmpty(actFilterPotholeConfigured, outPotholeData, activeFilterPotholeOutput);
+        //actFilterBumpConfigured.feedData(compoundAccelerationVector);
+        //actFilterPotholeConfigured.feedData(compoundAccelerationVector);
+
+        appendIfNotEmpty(actFilter, outData, activeFilterOutput);
+
+        //appendIfNotEmpty(actFilterBumpConfigured, outBumpData, activeFilterBumpOutput);
+        //appendIfNotEmpty(actFilterPotholeConfigured, outPotholeData, activeFilterPotholeOutput);
         
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        removeExcessSamples(outBumpData, wholeDequeSize);
-        removeExcessSamples(outPotholeData, wholeDequeSize);
+        removeExcessSamples(outData, wholeDequeSize);
+
+        //removeExcessSamples(outBumpData, wholeDequeSize);
+        //removeExcessSamples(outPotholeData, wholeDequeSize);
         
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        applyZScoreThresholding(outBumpData, sequenceBumpDeque, wholeDequeSize, lag, z_score_threshold, influence);
-        applyZScoreThresholding(outPotholeData, sequencePotholeDeque, wholeDequeSize, lag, z_score_threshold, influence);
+        // std::cout << "sequence deque: " << sequenceDeque.size() << std::endl;
+
+        applyZScoreThresholding(outData, sequenceDeque, wholeDequeSize, lag, z_score_threshold, influence);
+
+        //applyZScoreThresholding(outBumpData, sequenceBumpDeque, wholeDequeSize, lag, z_score_threshold, influence);
+        //applyZScoreThresholding(outPotholeData, sequencePotholeDeque, wholeDequeSize, lag, z_score_threshold, influence);
 
 
 
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        /*
         if (getStateChange(sequenceBumpDeque) == SequenceType::Rising) {
             rgbLed.bumpDetected();
             ++activeBumpCount;
@@ -668,8 +741,28 @@ int main(){
             std::string potholeLog = ",sample=" + std::to_string(sampleNumber) + ",pothole_count=" + std::to_string(activePotholeCount);
             TLogger::TLogInfo(directoryPath, bumpCountLogFile, potholeLog);
         }
-       
+        */
+
+        if (getStateChangeBump(sequenceDeque) == EventType::Bump) {
+            rgbLed.bumpDetected();
+            ++activeBumpCount;
+            //std::cout << "Bump detected at sample number: " << sampleNumber << std::endl;
+            std::string bumpLog = ",sample=" + std::to_string(sampleNumber) + ",bump_count=" + std::to_string(activeBumpCount);
+            TLogger::TLogInfo(directoryPath, bumpCountLogFile, bumpLog);
+        }
+
+        if (getStateChangePothole(sequenceDeque) == EventType::Pothole) {
+            rgbLed.potholeDetected();
+            ++activePotholeCount;
+            //std::cout << "Pothole detected at sample number: " << sampleNumber << std::endl;
+            std::string potholeLog = ",sample=" + std::to_string(sampleNumber) + ",pothole_count=" + std::to_string(activePotholeCount);
+            TLogger::TLogInfo(directoryPath, bumpCountLogFile, potholeLog);
+        }
+
+
         // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 
         int modeButtonState{ modeButton.getButtonState() };
 
@@ -699,12 +792,18 @@ int main(){
         ",ax="+std::to_string(ax)+",ay="+std::to_string(ay)+",az="+std::to_string(az)+\
         ",ax_filtered="+std::to_string(ax_filtered)+",ay_filtered="+std::to_string(ay_filtered)+",az_filtered="+std::to_string(az_filtered)+\
         ",ax_rotated="+std::to_string(ax_rotated)+",ay_rotated="+std::to_string(ay_rotated)+",az_rotated="+std::to_string(az_rotated)+\
+
         ",gr="+std::to_string(gr)+",gp="+std::to_string(gp)+",gy="+std::to_string(gy)+\
         ",gr_filtered="+std::to_string(gr_filtered)+",gp_filtered="+std::to_string(gp_filtered)+",gy="+std::to_string(gy_filtered)+\
         ",gr_rotated="+std::to_string(gr_rotated)+",gp_rotated="+std::to_string(gp_rotated)+",gy_rotated="+std::to_string(gy_rotated)+\
+
         ",roll_angle="+std::to_string(rollAngle)+",pitch_angle="+std::to_string(pitchAngle)+\
+
         ",comp_vector="+std::to_string(compoundAccelerationVector)+\
-        ",state_bump="+std::to_string(static_cast<int>(getStateChange(sequenceBumpDeque)))+",state_pothole="+std::to_string(static_cast<int>(getStateChange(sequencePotholeDeque)))+\
+
+        //",state_bump="+std::to_string(static_cast<int>(getStateChange(sequenceBumpDeque)))+",state_pothole="+std::to_string(static_cast<int>(getStateChange(sequencePotholeDeque)))+
+
+        ",state_bump="+std::to_string(static_cast<int>(getStateChangeBump(sequenceDeque))) + ",state_pothole="+std::to_string(static_cast<int>(getStateChangePothole(sequenceDeque)))+\
         ",pothole_button_state="+potholeButton.getButtonStateStr()+",bump_button_state="+bumpButton.getButtonStateStr()+",mode_button_state="+modeButton.getButtonStateStr();
 
         
